@@ -44,6 +44,8 @@ public class BattleScreen extends JPanel {
     private final List<Character>     party;
     private final List<Item>          inventory;
     private       List<Character>     enemies;
+    private final List<JPanel> enemySlots = new ArrayList<>();
+
 
     // ── State ──
     private int     activeCharIndex = 0;   // which party member is acting
@@ -200,7 +202,8 @@ public class BattleScreen extends JPanel {
             slot.setLayout(new BoxLayout(slot, BoxLayout.Y_AXIS));
             slot.setBackground(new Color(14, 10, 22));
 
-            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 120);
+            // Smaller + faster sprites on battle screen
+            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 70, 95);
             anim.setAlignmentX(CENTER_ALIGNMENT);
             animators.put("enemy_" + i, anim);
 
@@ -213,11 +216,11 @@ public class BattleScreen extends JPanel {
             hb.setAlignmentX(CENTER_ALIGNMENT);
             healthBars.put("enemy_" + i, hb);
 
-            slot.add(anim);
-            slot.add(Box.createVerticalStrut(4));
-            slot.add(nameLabel);
-            slot.add(Box.createVerticalStrut(3));
-            slot.add(hb);
+            slot.add(hb);                            // ← health bar drawn first = visually on top
+slot.add(Box.createVerticalStrut(3));    // ← gap between bar and sprite (increase = more space)
+slot.add(anim);                          // ← sprite below the bar
+slot.add(Box.createVerticalStrut(4));    // ← gap at the bottom
+slot.add(nameLabel);
 
             // Click enemy to select as target
             final int idx = i;
@@ -234,130 +237,237 @@ public class BattleScreen extends JPanel {
     }
 
     // ── CENTER: hero and enemy battlefield with battle log beneath ──
-    private JPanel buildBattlefieldPanel() {
-        JPanel panel = new JPanel(new BorderLayout(0, 12));
-        panel.setOpaque(false);
-        panel.setBorder(BorderFactory.createEmptyBorder(14, 14, 10, 14));
+   private JPanel buildBattlefieldPanel() {
 
-        JPanel combatRow = new JPanel(new GridLayout(1, 2, 14, 0));
-        combatRow.setOpaque(false);
-
-        JPanel heroColumn = new JPanel();
-        heroColumn.setLayout(new BoxLayout(heroColumn, BoxLayout.Y_AXIS));
-        heroColumn.setOpaque(false);
-        heroColumn.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
-
-        JLabel heroTitle = new JLabel("Heroes");
-        heroTitle.setFont(new Font("Serif", Font.BOLD, 13));
-        heroTitle.setForeground(new Color(185, 195, 220));
-        heroTitle.setAlignmentX(LEFT_ALIGNMENT);
-        heroColumn.add(heroTitle);
-        heroColumn.add(Box.createVerticalStrut(10));
-
-        for (int i = 0; i < party.size(); i++) {
-            Character c = party.get(i);
-            heroColumn.add(buildCombatSlot(c, "party_" + i, i, new Color(15, 15, 30)));
-            heroColumn.add(Box.createVerticalStrut(10));
+    JPanel panel = new JPanel(new BorderLayout(0, 12)) {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            BufferedImage bg = BACKGROUND_CACHE.get(backgroundKey());
+            if (bg == null) return;
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                int pw = getWidth(), ph = getHeight();
+                if (pw <= 0 || ph <= 0) return;
+                int bw = bg.getWidth(), bh = bg.getHeight();
+                if (bw <= 0 || bh <= 0) return;
+                double scale = Math.max((double) pw / bw, (double) ph / bh);
+                int dw = (int) Math.round(bw * scale);
+                int dh = (int) Math.round(bh * scale);
+                g2.drawImage(bg, (pw - dw) / 2, (ph - dh) / 2, dw, dh, null);
+            } finally { g2.dispose(); }
         }
-        heroColumn.add(Box.createVerticalGlue());
+    };
 
-        JPanel enemyColumn = new JPanel();
-        enemyColumn.setLayout(new BoxLayout(enemyColumn, BoxLayout.Y_AXIS));
-        enemyColumn.setOpaque(false);
-        enemyColumn.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 0));
+    
+    panel.setOpaque(false);
+    panel.setBorder(BorderFactory.createEmptyBorder(14, 14, 10, 14));
 
-        JLabel enemyTitle = new JLabel("Enemies");
-        enemyTitle.setFont(new Font("Serif", Font.BOLD, 13));
-        enemyTitle.setForeground(new Color(220, 140, 120));
-        enemyTitle.setAlignmentX(LEFT_ALIGNMENT);
-        enemyColumn.add(enemyTitle);
-        enemyColumn.add(Box.createVerticalStrut(10));
+    // ── STAGGERED BATTLEFIELD — null layout so we control every slot's position ──
+    JPanel battlefield = new JPanel(null);   // null = absolute positioning
+    battlefield.setOpaque(false);
+    battlefield.setPreferredSize(new Dimension(0, 340)); // ← height of battlefield area in px
 
-        for (int i = 0; i < enemies.size(); i++) {
-            Character e = enemies.get(i);
-            enemyColumn.add(buildCombatSlot(e, "enemy_" + i, i, new Color(35, 10, 10)));
-            enemyColumn.add(Box.createVerticalStrut(10));
+    // ── HERO SIDE (left half of battlefield) ──
+    //    Hero slots positioned by setBounds(x, y, width, height)
+    //    x    = pixels from LEFT edge of the battlefield panel
+    //    y    = pixels from TOP  edge — HIGHER y = lower on screen (further = smaller y)
+    //    w/h  = size of the slot including sprite + bar
+
+    for (int i = 0; i < party.size(); i++) {
+        Character c = party.get(i);
+
+        // Sprite sizes: front hero bigger, back hero smaller
+        int spriteSize = (i == 0) ? 240 : 200;
+
+        // Slot bounds for each position
+        // Hero 0 = front-right, Hero 1 = back-left (behind and up)
+        int slotW = spriteSize + 40;
+        int slotH = spriteSize + 60; // ← +60 leaves room for the health bar above
+
+        int slotX, slotY;
+        if (i == 0) {
+            slotX = 120;  // ← pixels from left — increase to push hero 1 right
+            slotY = 140;  // ← pixels from top  — increase to push hero 1 DOWN (more foreground)
+        } else {
+            slotX = 20;   // ← hero 2 further left (behind hero 1)
+            slotY = 130;   // ← hero 2 higher up on screen (more background/depth)
         }
-        enemyColumn.add(Box.createVerticalGlue());
 
-        combatRow.add(heroColumn);
-        combatRow.add(enemyColumn);
-        panel.add(combatRow, BorderLayout.CENTER);
-
-        // Battle log at bottom of center
-        battleLog = new JTextArea();
-        battleLog.setEditable(false);
-        battleLog.setBackground(new Color(8, 8, 14, 220));
-        battleLog.setForeground(new Color(200, 200, 220));
-        battleLog.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        battleLog.setLineWrap(true);
-        battleLog.setWrapStyleWord(true);
-        battleLog.setOpaque(true);
-        battleLog.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        JScrollPane scroll = new JScrollPane(battleLog);
-        scroll.setPreferredSize(new Dimension(0, 120));
-        scroll.setBorder(BorderFactory.createLineBorder(new Color(50, 50, 70)));
-        scroll.getViewport().setBackground(new Color(8, 8, 14, 220));
-        panel.add(scroll, BorderLayout.SOUTH);
-
-        return panel;
+        JPanel slot = buildCombatSlot(c, "party_" + i, i, new Color(15, 15, 30), spriteSize);
+        slot.setBounds(slotX, slotY, slotW, slotH);
+        battlefield.add(slot);
     }
 
-    private JPanel buildCombatSlot(Character c, String key, int index, Color tint) {
-        JPanel slot = new JPanel();
-        slot.setLayout(new BoxLayout(slot, BoxLayout.Y_AXIS));
+    // ── ENEMY SIDE (right half of battlefield) ──
+    //    Enemy 0 = front-left of enemy group
+    //    Enemy 1 = back-right of enemy group
+    for (int i = 0; i < enemies.size(); i++) {
+        Character e = enemies.get(i);
 
-        // Let the background show through (no boxed container feel)
-        slot.setOpaque(false);
-        slot.setBackground(new Color(tint.getRed(), tint.getGreen(), tint.getBlue(), 0));
-        slot.setBorder(BorderFactory.createEmptyBorder(10, 6, 10, 6));
+        int spriteSize = (i == 0) ? 240 : 200;
+        int slotW = spriteSize + 40;
+        int slotH = spriteSize + 60;
 
-        // Match sizing between heroes and enemies; keep room for skill animations
-        slot.setPreferredSize(new Dimension(260, 260));
+        // X offset: enemies start from the center-right of the battlefield
+        // The panel itself is the CENTER region; assume ~700px wide after sidebars
+        // Adjust baseX if enemies appear too far left or right
+        int baseX = 380; // ← increase = push all enemies right; decrease = push left
 
-        SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 110);
-        anim.setAlignmentX(CENTER_ALIGNMENT);
-        anim.setPreferredSize(new Dimension(180, 180));
-        anim.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-        animators.put(key, anim);
-
-        // Animator wrapper prevents clipping from tight BoxLayout sizing
-        JPanel animWrap = new JPanel(new BorderLayout());
-        animWrap.setOpaque(false);
-        animWrap.add(anim, BorderLayout.CENTER);
-
-        JLabel nameLabel = new JLabel(c.getName(), SwingConstants.CENTER);
-        nameLabel.setFont(new Font("Serif", Font.BOLD, 12));
-        nameLabel.setForeground(new Color(235, 235, 240));
-        nameLabel.setAlignmentX(CENTER_ALIGNMENT);
-
-        HealthBar hb = new HealthBar(c, 160, 12);
-        hb.setAlignmentX(CENTER_ALIGNMENT);
-        healthBars.put(key, hb);
-
-        slot.add(anim);
-        slot.add(Box.createVerticalStrut(4));
-        slot.add(nameLabel);
-        slot.add(Box.createVerticalStrut(3));
-        slot.add(hb);
-
-        if (key.startsWith("enemy_")) {
-            final int idx = index;
-            slot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            slot.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
-                    if (!enemies.get(idx).isAlive()) return;
-                    selectedTarget = idx;
-                    highlightEnemyCard(idx);
-                    updateDetailPanel(enemies.get(idx));
-                    log("Targeting: " + enemies.get(idx).getName());
-                }
-            });
+        int slotX, slotY;
+        if (i == 0) {
+            slotX = baseX + 80;  // ← enemy 1 front — further right
+            slotY = 140;          // ← enemy 1 lower on screen (foreground)
+        } else {
+            slotX = baseX;        // ← enemy 2 back — to the left of enemy 1
+            slotY = 130;           // ← enemy 2 higher (background)
         }
 
-        return slot;
+        JPanel slot = buildCombatSlot(e, "enemy_" + i, i, new Color(35, 10, 10), spriteSize);
+        slot.setBounds(slotX, slotY, slotW, slotH);
+        battlefield.add(slot);
+        enemySlots.add(slot);
+
+        // ── ENEMY HEALTH BARS ──
+
     }
+
+    panel.add(battlefield, BorderLayout.CENTER);
+    return panel;
+}
+private JPanel getEnemySlot(int index) {
+    if (index < 0 || index >= enemySlots.size()) return null;
+    return enemySlots.get(index);
+}
+
+    private JPanel buildCombatSlot(Character c, String key, int index,
+                                Color tint, int spriteSize) {
+
+    // Outer panel uses absolute (null) layout so we can layer bar ON TOP of sprite
+    JPanel slot = new JPanel(null);
+    slot.setOpaque(false);
+
+    // ── 1. Sprite animator fills the whole slot ──
+    SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 70, spriteSize);
+    anim.setBounds(0, 0, spriteSize, spriteSize);   // full slot width and height
+    animators.put(key, anim);
+    slot.add(anim);
+
+    // ── 2. Name label — sits just above the health bar ──
+    JLabel nameLabel = new JLabel(c.getName(), SwingConstants.CENTER);
+    nameLabel.setFont(new Font("Serif", Font.BOLD, 11));
+    nameLabel.setForeground(new Color(235, 235, 240));
+    int nameLabelH = 16;
+    int barH       = 14;   // ← height of the health bar in pixels; increase for a taller bar
+    int barY       = 4;    // ← pixels from the TOP of the slot — 4 = almost at the very top of the sprite head
+                           //   increase this to push the bar lower (e.g. 20 = inside the head region)
+                           //   decrease to 0 to touch the absolute top edge
+    int barW = spriteSize; // bar is exactly as wide as the sprite — no misalignment
+
+    nameLabel.setBounds(0, barY - nameLabelH - 1, barW, nameLabelH);
+    slot.add(nameLabel);
+
+    // ── 3. Health bar — layered over the sprite, at the top ──
+    HealthBar hb = new HealthBar(c, barW, barH);
+    hb.setBounds(0, barY, barW, barH);  // x=0, y=barY (top of sprite), w=full, h=barH
+    healthBars.put(key, hb);
+    slot.add(hb);
+
+    // ── 4. Enemy click handler ──
+    if (key.startsWith("enemy_")) {
+        final int idx = index;
+        slot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        slot.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
+                if (!enemies.get(idx).isAlive()) return;
+                selectedTarget = idx;
+                highlightEnemyCard(idx);
+                updateDetailPanel(enemies.get(idx));
+                log("Targeting: " + enemies.get(idx).getName());
+            }
+        });
+    }
+
+    return slot;
+}
+
+/**
+ * Slides a slot (identified by its animator key) toward a target X position,
+ * plays the animation, deals damage via onDamage, then slides back.
+ *
+ * key        = "party_0" or "party_1"
+ * targetSlot = the enemy's JPanel slot (so we know where to slide to)
+ * animName   = "attack", "skill1", "skill2", "skill3"
+ * onDamage   = runs after the approach + animation, before sliding back
+ */
+private void approachAndAttack(String key, JPanel targetSlot,
+                                String animName, Runnable onDamage) {
+
+    SpriteAnimator anim = animators.get(key);
+    // Find the attacker's slot panel — it's the anim's parent
+    JPanel attackerSlot = (anim != null) ? (JPanel) anim.getParent() : null;
+    if (attackerSlot == null) { onDamage.run(); return; }
+
+    // Record the attacker's starting position
+    int startX = attackerSlot.getX();
+    int startY = attackerSlot.getY();
+
+    // Calculate where the enemy target is — we want to stop just beside it
+    // targetSlot.getX() is in the battlefield panel's coordinate space
+    int targetX = targetSlot.getX();
+
+    // Decide approach direction: heroes approach right, enemies approach left
+    // Heroes are on the left side (startX < 300), enemies on the right
+    boolean heroIsAttacker = key.startsWith("party_");
+    int approachX = heroIsAttacker
+        ? targetX - attackerSlot.getWidth() - 10   // stop just left of the enemy
+        : targetX + targetSlot.getWidth() + 10;     // enemy stops just right of the hero
+
+    // ── Step 1: Slide toward target ──
+    int stepPx    = 18;   // ← pixels per frame of movement — increase for faster stride
+    int stepMs    = 16;   // ← ms between position updates (~60fps) — decrease for smoother
+    int[] currentX = { startX };
+
+    Timer slideIn = new Timer(stepMs, null);
+    slideIn.addActionListener(e -> {
+        int dx = approachX - currentX[0];
+        if (Math.abs(dx) <= stepPx) {
+            // Reached target — snap to position
+            currentX[0] = approachX;
+            attackerSlot.setLocation(approachX, startY);
+            slideIn.stop();
+
+            // ── Step 2: Play the attack animation ──
+            if (anim != null) {
+                anim.playOnce(animName, () -> {
+                    onDamage.run();
+                    // ── Step 3: Slide back to original position ──
+                    Timer slideOut = new Timer(stepMs, null);
+                    int[] cx = { approachX };
+                    slideOut.addActionListener(ev -> {
+                        int ddx = startX - cx[0];
+                        if (Math.abs(ddx) <= stepPx) {
+                            attackerSlot.setLocation(startX, startY);
+                            slideOut.stop();
+                        } else {
+                            cx[0] += (ddx > 0) ? stepPx : -stepPx;
+                            attackerSlot.setLocation(cx[0], startY);
+                        }
+                    });
+                    slideOut.start();
+                });
+            } else {
+                onDamage.run();
+            }
+        } else {
+            currentX[0] += (dx > 0) ? stepPx : -stepPx;
+            attackerSlot.setLocation(currentX[0], startY);
+        }
+    });
+    slideIn.start();
+}
 
     // ── EAST: enemy detail + active character mini stats ──
     private JPanel buildDetailPanel() {
@@ -370,36 +480,7 @@ public class BattleScreen extends JPanel {
         ));
         panel.setPreferredSize(new Dimension(200, 0));
 
-        // Section: enemy detail
-        JLabel sec1 = new JLabel("Enemy Detail");
-        sec1.setFont(new Font("Serif", Font.BOLD, 12));
-        sec1.setForeground(new Color(201, 148, 58));
-        sec1.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(sec1);
-        panel.add(Box.createVerticalStrut(8));
-
-        detailName = makeDetailLabel("—", new Color(220, 90, 90));
-        detailHp   = makeDetailRow("HP", "—/—");
-        detailHpBar = new HealthBar(enemies.isEmpty() ? party.get(0) : enemies.get(0), 160, 10);
-        detailHpBar.setAlignmentX(LEFT_ALIGNMENT);
-        detailAtk    = makeDetailRow("ATK", "—");
-        detailDef    = makeDetailRow("DEF", "—");
-        detailStatus = makeDetailRow("Status", "Normal");
-
-        panel.add(detailName);
-        panel.add(Box.createVerticalStrut(4));
-        panel.add(detailHp);
-        panel.add(Box.createVerticalStrut(3));
-        panel.add(detailHpBar);
-        panel.add(Box.createVerticalStrut(6));
-        panel.add(detailAtk);
-        panel.add(detailDef);
-        panel.add(detailStatus);
-
-        // Spacer
-        panel.add(Box.createVerticalGlue());
-
-        // Section: active character
+        // ONLY show Active Hero + Log (no Enemy Detail section)
         JLabel sec2 = new JLabel("Active Hero");
         sec2.setFont(new Font("Serif", Font.BOLD, 12));
         sec2.setForeground(new Color(201, 148, 58));
@@ -407,8 +488,27 @@ public class BattleScreen extends JPanel {
         panel.add(sec2);
         panel.add(Box.createVerticalStrut(6));
 
-        // Will be refreshed by rebuildActionPanel()
+        // Active hero mini stats
         if (!party.isEmpty()) updateActiveHeroDetail(panel);
+
+        // Log / result text INSIDE the right sidebar
+        battleLog = new JTextArea();
+        battleLog.setEditable(false);
+        battleLog.setBackground(new Color(8, 8, 14, 220));
+        battleLog.setForeground(new Color(200, 200, 220));
+        battleLog.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        battleLog.setLineWrap(true);
+        battleLog.setWrapStyleWord(true);
+        battleLog.setOpaque(true);
+        battleLog.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JScrollPane logScroll = new JScrollPane(battleLog);
+        logScroll.setBorder(BorderFactory.createLineBorder(new Color(50, 50, 70)));
+        logScroll.getViewport().setBackground(new Color(8, 8, 14, 220));
+        logScroll.setPreferredSize(new Dimension(0, 260));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(logScroll);
 
         return panel;
     }
@@ -519,8 +619,9 @@ public class BattleScreen extends JPanel {
             partySection.add(card);
 
             // Sprite animator for this character (bottom zone)
-            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 110);
-            animators.put("party_" + i, anim);
+            // Smaller + faster sprites on bottom party strip
+            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 50, 70);
+animators.put("party_card_" + i, anim);
 
             // Health bar
             HealthBar hb = new HealthBar(c, 130, 10);
@@ -859,75 +960,81 @@ public class BattleScreen extends JPanel {
     // ACTIONS
     // ─────────────────────────────────────────────────
     private void doAttack() {
-        if (!playerTurn) return;
-        Character actor  = party.get(activeCharIndex);
-        Character target = enemies.get(selectedTarget);
-        if (!target.isAlive()) { log("That enemy is already dead. Pick another target."); return; }
+    if (!playerTurn) return;
+    Character actor  = party.get(activeCharIndex);
+    Character target = enemies.get(selectedTarget);
+    if (!target.isAlive()) { log("That enemy is dead. Pick another."); return; }
 
-        // Play attack animation, THEN deal damage
-        SpriteAnimator anim = animators.get("party_" + activeCharIndex);
-        if (anim != null) anim.playOnce("attack", () -> {
-            BattleEngine.AttackResult result = BattleEngine.playerAttack(actor, target);
-            log(result.message);
-            updateAllBars();
-            if (!target.isAlive()) {
-                log(target.getName() + " was defeated!");
-                frame.addEnemyKill();
-                enemiesKilledThisWave++;
-                animators.get("enemy_" + selectedTarget).playOnce("death", () -> {});
-            }
-            frame.addTurn();
-            checkWaveOver();
-            if (BattleEngine.isEnemyWaveDefeated(enemies)) return;
-            actor.setTaunted(false);
-            endPlayerTurn();
-        });
-        else { // no animator available — apply immediately
-            BattleEngine.AttackResult result = BattleEngine.playerAttack(actor, target);
-            log(result.message);
-            updateAllBars();
-            checkWaveOver();
-            if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+    // Get the enemy's slot so we know where to approach
+    JPanel targetSlot = getEnemySlot(selectedTarget);
+
+    Runnable onDamage = () -> {
+        BattleEngine.AttackResult result = BattleEngine.playerAttack(actor, target);
+        log(result.message);
+        updateAllBars();
+        if (!target.isAlive()) {
+            log(target.getName() + " was defeated!");
+            frame.addEnemyKill();
+            SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
+            if (deathAnim != null) deathAnim.playOnce("death", () -> {});
         }
+        frame.addTurn();
+        checkWaveOver();
+        if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+    };
+
+    if (targetSlot != null) {
+        approachAndAttack("party_" + activeCharIndex, targetSlot, "attack", onDamage);
+    } else {
+        // No slot reference — fall back to play-in-place
+        SpriteAnimator anim = animators.get("party_" + activeCharIndex);
+        if (anim != null) anim.playOnce("attack", onDamage);
+        else onDamage.run();
     }
+}
 
     private void doSkill(int skillIndex) {
-        if (!playerTurn) return;
-        Character actor  = party.get(activeCharIndex);
-        Character target = enemies.get(selectedTarget);
-        Skill     skill  = actor.getSkill(skillIndex);
+    if (!playerTurn) return;
+    Character actor  = party.get(activeCharIndex);
+    Character target = enemies.get(selectedTarget);
+    Skill     skill  = actor.getSkill(skillIndex);
 
-        if (actor.getMana() < skill.getManaCost()) {
-            log("Not enough mana for " + skill.getName() + "!");
-            return;
-        }
-
-        SpriteAnimator anim = animators.get("party_" + activeCharIndex);
-        String animName = switch (skillIndex) {
-            case 0 -> "skill1";
-            case 1 -> "skill2";
-            case 2 -> "skill3";
-            default -> "attack";
-        };
-
-        Runnable afterAnim = () -> {
-            if (skill.getType().equals("damage_all")) {
-                List<BattleEngine.AttackResult> results =
-                    BattleEngine.playerSkillAoe(actor, skillIndex, enemies);
-                results.forEach(r -> log(r.message));
-            } else {
-                BattleEngine.AttackResult result =
-                    BattleEngine.playerSkill(actor, skillIndex, target);
-                log(result.message);
-            }
-            updateAllBars();
-            checkWaveOver();
-            if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
-        };
-
-        if (anim != null) anim.playOnce(animName, afterAnim);
-        else afterAnim.run();
+    if (actor.getMana() < skill.getManaCost()) {
+        log("Not enough mana for " + skill.getName() + "!"); return;
     }
+
+    String animName = switch (skillIndex) {
+        case 0 -> "skill1";
+        case 1 -> "skill2";
+        case 2 -> "skill3";
+        default -> "attack";
+    };
+
+    Runnable onDamage = () -> {
+        if (skill.getType().equals("damage_all")) {
+            BattleEngine.playerSkillAoe(actor, skillIndex, enemies)
+                .forEach(r -> log(r.message));
+        } else {
+            log(BattleEngine.playerSkill(actor, skillIndex, target).message);
+        }
+        updateAllBars();
+        checkWaveOver();
+        if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+    };
+
+    // skill2 (index 1) is often ranged (Multi Slash flies out) — skip approach for AOE
+    boolean isMelee = !skill.getType().equals("damage_all");
+    JPanel targetSlot = getEnemySlot(selectedTarget);
+
+    if (isMelee && targetSlot != null) {
+        approachAndAttack("party_" + activeCharIndex, targetSlot, animName, onDamage);
+    } else {
+        SpriteAnimator anim = animators.get("party_" + activeCharIndex);
+        if (anim != null) anim.playOnce(animName, onDamage);
+        else onDamage.run();
+    }
+}
+
 
     private void doItem() {
         if (!playerTurn) return;
@@ -1111,18 +1218,8 @@ public class BattleScreen extends JPanel {
 
     @Override
     protected void paintComponent(Graphics g) {
+        // Background is now rendered only in the center battlefield panel
         super.paintComponent(g);
-
-        BufferedImage bg = BACKGROUND_CACHE.get(backgroundKey());
-        if (bg == null) return;
-
-        Graphics2D g2 = (Graphics2D) g.create();
-        try {
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2.drawImage(bg, 0, 0, getWidth(), getHeight(), null);
-        } finally {
-            g2.dispose();
-        }
     }
 
     // ─────────────────────────────────────────────────

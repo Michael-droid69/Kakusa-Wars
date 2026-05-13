@@ -29,7 +29,7 @@ public class MainFrame extends JFrame {
         setTitle("⚔  RPG Battle System");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1100, 720);
-        setMinimumSize(new Dimension(900, 600));
+        setMinimumSize(new Dimension(1440, 680));
         setLocationRelativeTo(null);
         setResizable(false);
         getContentPane().add(root);
