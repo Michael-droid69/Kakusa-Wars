@@ -203,7 +203,7 @@ public class BattleScreen extends JPanel {
             slot.setBackground(new Color(14, 10, 22));
 
             // Smaller + faster sprites on battle screen
-            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 70, 95);
+            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 33, 95);
             anim.setAlignmentX(CENTER_ALIGNMENT);
             animators.put("enemy_" + i, anim);
 
@@ -350,7 +350,7 @@ private JPanel getEnemySlot(int index) {
     slot.setOpaque(false);
 
     // ── 1. Sprite animator fills the whole slot ──
-    SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 70, spriteSize);
+    SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 33, spriteSize);
     anim.setBounds(0, 0, spriteSize, spriteSize);   // full slot width and height
     animators.put(key, anim);
     slot.add(anim);
@@ -620,7 +620,7 @@ private void approachAndAttack(String key, JPanel targetSlot,
 
             // Sprite animator for this character (bottom zone)
             // Smaller + faster sprites on bottom party strip
-            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 50, 70);
+            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 33, 70);
 animators.put("party_card_" + i, anim);
 
             // Health bar
@@ -1164,11 +1164,25 @@ animators.put("party_card_" + i, anim);
         log("✓ Wave " + wave + " cleared!");
 
         if (wave >= 4) {
-            // All 4 waves done — victory
-            log("🏆 All waves defeated! You win!");
-            Timer t = new Timer(1500, e -> frame.goToGameOver(true));
-            t.setRepeats(false); t.start();
-        } else {
+    log("🏆 All waves defeated! You win!");
+
+    // ADD this block before the Timer:
+    try {
+        io.SaveManager.registerOrUpdatePlayer(
+            frame.getUsername(),
+            frame.getCurrentWave(),     // highest wave reached
+            frame.getEnemiesKilled(),
+            frame.getTurnsTotal(),
+            frame.getCurrentArea()
+        );
+        io.SaveManager.clearSaveData(); // ← session over: wipe the active save
+    } catch (java.io.IOException e) {
+        System.out.println("Could not update leaderboard: " + e.getMessage());
+    }
+
+    Timer t = new Timer(1500, e -> frame.goToGameOver(true));
+    t.setRepeats(false); t.start();
+} else {
             // Save game, go to shop, then next wave
             frame.saveCurrentGame();
             log("Heading to the shop...");
@@ -1189,8 +1203,8 @@ animators.put("party_card_" + i, anim);
         String area = frame.getCurrentArea();
         return switch (area) {
             case "Forest"  -> "assets/background/forest.png";
-            case "Dungeon" -> "assets/background/haunted.png";
-            case "Volcano" -> "assets/background/ritual.png";
+            case "Academia" -> "assets/background/haunted.png";
+            case "Dungeon" -> "assets/background/ritual.png";
             default        -> "assets/background/forest.png";
         };
     }
@@ -1198,8 +1212,8 @@ animators.put("party_card_" + i, anim);
     private void preloadBackgroundForArea(String area) {
         String key = switch (area) {
             case "Forest"  -> "assets/background/forest.png";
-            case "Dungeon" -> "assets/background/haunted.png";
-            case "Volcano" -> "assets/background/ritual.png";
+            case "Academia" -> "assets/background/haunted.png";
+            case "Dungeon" -> "assets/background/ritual.png";
             default        -> "assets/background/forest.png";
         };
 

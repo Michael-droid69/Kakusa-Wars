@@ -36,12 +36,22 @@ public class MainFrame extends JFrame {
         setVisible(true);
 
         // Start on the username screen
-        goToUsername();
+        goToMainMenu();
     }
 
     // ─────────────────────────────────────────────────
     // NAVIGATION METHODS — each screen calls one of these
     // ─────────────────────────────────────────────────
+
+    public void goToMainMenu() {
+    addScreen(new MainMenuScreen(this), "mainmenu");
+    layout.show(root, "mainmenu");
+}
+
+public void goToLeaderboard() {
+    addScreen(new LeaderboardScreen(this), "leaderboard");
+    layout.show(root, "leaderboard");
+}
     public void goToUsername() {
         addScreen(new UsernameScreen(this), "username");
         layout.show(root, "username");

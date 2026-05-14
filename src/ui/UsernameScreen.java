@@ -46,27 +46,45 @@ public class UsernameScreen extends JPanel {
         g.gridy = 4; add(startBtn, g);
 
         startBtn.addActionListener(e -> {
-            String name = nameField.getText().trim();
-            try {
-                // Validate — throws custom exception on bad input
-                if (name.isEmpty() || name.length() > 20)
-                    throw new exceptions.InvalidSelectionException(
-                        "Username must be 1–20 characters. You entered: \"" + name + "\"");
+    // 1. Get and clean the input
+    String name = nameField.getText().trim();
 
-                io.SaveManager.logUsername(name);   // write to players.txt
-                frame.setUsername(name);
-                frame.setInventory(core.BattleEngine.buildStartingInventory());
-                frame.goToCharacterSelect();
+    try {
+        // 2. VALIDATION (The "Guard Clause")
+        if (name.isEmpty() || name.length() > 20) {
+            throw new exceptions.InvalidSelectionException(
+                "Username must be 1–20 characters. You entered: \"" + name + "\""
+            );
+        }
 
-            } catch (exceptions.InvalidSelectionException ex) {
-                JOptionPane.showMessageDialog(frame, ex.getMessage(),
-                    "Invalid Username", JOptionPane.WARNING_MESSAGE);
-            } catch (java.io.IOException ex) {
-                JOptionPane.showMessageDialog(frame,
-                    "Could not write to players.txt: " + ex.getMessage(),
-                    "File Error", JOptionPane.ERROR_MESSAGE);
-            }
-        });
+        // 3. FILE OPERATIONS (The "Persistence" Layer)
+        // We do this BEFORE switching screens so we don't lose data
+        io.SaveManager.registerOrUpdatePlayer(name, 0, 0, 0, "Forest");
+        io.SaveManager.logUsername(name); 
+
+        // 4. STATE UPDATE (Updating the MainFrame)
+        frame.setUsername(name);
+        frame.setInventory(core.BattleEngine.buildStartingInventory());
+
+        // 5. NAVIGATION (Success! Move to next screen)
+        frame.goToCharacterSelect();
+
+    } catch (exceptions.InvalidSelectionException ex) {
+        // Specific UI warning for bad input
+        JOptionPane.showMessageDialog(frame, ex.getMessage(),
+            "Invalid Username", JOptionPane.WARNING_MESSAGE);
+            
+    } catch (java.io.IOException ex) {
+        // Serious error if the hard drive is locked or file is missing
+        JOptionPane.showMessageDialog(frame,
+            "Critical Error: Could not save player data.\n" + ex.getMessage(),
+            "File System Error", JOptionPane.ERROR_MESSAGE);
+            
+    } catch (Exception ex) {
+        // General catch-all to prevent the whole game from crashing
+        System.err.println("Unexpected error: " + ex.getMessage());
+    }
+});
 
         // ── Continue button — only shown if save file exists ──
         if (io.SaveManager.hasSaveFile()) {

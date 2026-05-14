@@ -9,6 +9,114 @@ public class SaveManager {
     private static final String SAVE_PATH   = "saves/save_data.txt";
     private static final String PLAYER_LOG  = "players.txt";
 
+    private static final String SAVE_FILE    = "save_data.txt";   // ← active session
+private static final String PLAYERS_FILE = "players.txt";     // ← all-time records
+
+/**
+ * Returns true if save_data.txt exists and contains a "username=" line.
+ * Used by MainMenuScreen to decide whether Continue is enabled.
+ */
+public static boolean hasSaveData() {
+    java.io.File f = new java.io.File(SAVE_FILE);
+    if (!f.exists()) return false;
+    try (java.util.Scanner sc = new java.util.Scanner(f)) {
+        while (sc.hasNextLine()) {
+            String line = sc.nextLine().trim();
+            if (line.startsWith("username=") && line.length() > "username=".length())
+                return true;   // found a non-empty username line
+        }
+    } catch (java.io.IOException ignored) {}
+    return false;
+}
+
+/**
+ * Deletes save_data.txt (or empties it).
+ * Called by "New Game" so a stale save can't be loaded by accident.
+ */
+public static void clearSaveData() {
+    java.io.File f = new java.io.File(SAVE_FILE);
+    if (f.exists()) f.delete();
+}
+
+/**
+ * Appends or updates a player entry in players.txt.
+ * Call this when:
+ *   (a) a brand-new username is confirmed — pass wave=1, kills=0, turns=0
+ *   (b) a session ends (win or lose) — pass their final stats
+ *
+ * If the username already exists, the line is updated (higher wave wins).
+ * If it's new, a line is appended.
+ */
+public static void registerOrUpdatePlayer(String username, int highestWave,
+                                           int totalKills, int totalTurns,
+                                           String lastArea) throws java.io.IOException {
+    java.io.File f = new java.io.File(PLAYERS_FILE);
+    java.util.List<String> lines = new java.util.ArrayList<>();
+    boolean found = false;
+
+    if (f.exists()) {
+        try (java.util.Scanner sc = new java.util.Scanner(f)) {
+            while (sc.hasNextLine()) {
+                String line = sc.nextLine().trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    lines.add(line); continue;
+                }
+                String[] parts = line.split(",");
+                if (parts.length >= 1 && parts[0].equalsIgnoreCase(username)) {
+                    // Update: keep the HIGHER wave
+                    int existingWave = parts.length >= 2
+                        ? Integer.parseInt(parts[1].trim()) : 0;
+                    int bestWave = Math.max(existingWave, highestWave);
+                    lines.add(username + "," + bestWave + "," + totalKills
+                              + "," + totalTurns + "," + lastArea);
+                    found = true;
+                } else {
+                    lines.add(line);
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        // Brand new player — append
+        lines.add(username + "," + highestWave + "," + totalKills
+                  + "," + totalTurns + "," + lastArea);
+    }
+
+    try (java.io.PrintWriter pw = new java.io.PrintWriter(
+            new java.io.FileWriter(f, false))) {   // false = overwrite
+        for (String l : lines) pw.println(l);
+    }
+}
+
+/**
+ * Reads players.txt and returns a list of String arrays.
+ * Each array: [username, highestWave, totalKills, totalTurns, lastArea]
+ * Used by LeaderboardScreen.
+ * Returns empty list if file doesn't exist.
+ */
+public static java.util.List<String[]> loadLeaderboard() {
+    java.util.List<String[]> result = new java.util.ArrayList<>();
+    java.io.File f = new java.io.File(PLAYERS_FILE);
+    if (!f.exists()) return result;
+    try (java.util.Scanner sc = new java.util.Scanner(f)) {
+        while (sc.hasNextLine()) {
+            String line = sc.nextLine().trim();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            String[] parts = line.split(",");
+            if (parts.length >= 5) result.add(parts);
+        }
+    } catch (java.io.IOException ignored) {}
+    // Sort by highest wave descending
+    result.sort((a, b) -> {
+        try { return Integer.compare(
+            Integer.parseInt(b[1].trim()),
+            Integer.parseInt(a[1].trim())); }
+        catch (NumberFormatException e) { return 0; }
+    });
+    return result;
+}
+
     // ─────────────────────────────────────────────────
     // USERNAME LOG
     // Called once on the UsernameScreen when player hits Start.
