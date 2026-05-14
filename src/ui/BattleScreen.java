@@ -975,8 +975,15 @@ animators.put("party_card_" + i, anim);
         if (!target.isAlive()) {
             log(target.getName() + " was defeated!");
             frame.addEnemyKill();
+
             SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
-            if (deathAnim != null) deathAnim.playOnce("death", () -> {});
+            if (deathAnim != null) {
+                // stop idle loop so we don't keep ticking a "dead" enemy sprite
+                deathAnim.stop();
+                deathAnim.playOnce("death", () -> {});
+                // remove animator so it can't keep scheduling/ticking via any remaining references
+                animators.remove("enemy_" + selectedTarget);
+            }
         }
         frame.addTurn();
         checkWaveOver();
@@ -1011,6 +1018,13 @@ animators.put("party_card_" + i, anim);
     };
 
     Runnable onDamage = () -> {
+        // SKILL FINISH CACHE CLEAR (#3 requirement):
+        // when the skill animation finishes (playOnce onComplete calls onDamage.run),
+        // clear cached frames for skill3 to prevent any cache/timer buildup.
+        if (skillIndex == 2) {
+            SpriteAnimator.clearCacheFor(actor.getSpriteFolder(), "skill3", false);
+        }
+
         if (skill.getType().equals("damage_all")) {
             BattleEngine.playerSkillAoe(actor, skillIndex, enemies)
                 .forEach(r -> log(r.message));
@@ -1183,6 +1197,12 @@ animators.put("party_card_" + i, anim);
     Timer t = new Timer(1500, e -> frame.goToGameOver(true));
     t.setRepeats(false); t.start();
 } else {
+            // wave cleared: stop all remaining enemy sprite timers so old waves can't keep ticking
+            for (SpriteAnimator anim : animators.values()) {
+                if (anim != null) anim.stop();
+            }
+            animators.clear();
+
             // Save game, go to shop, then next wave
             frame.saveCurrentGame();
             log("Heading to the shop...");

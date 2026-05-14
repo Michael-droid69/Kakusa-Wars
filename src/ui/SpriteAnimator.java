@@ -25,6 +25,8 @@ public class SpriteAnimator extends JLabel {
     private final int iconSizePx;
     private Timer timer;
     private final boolean flipX;
+    private static final java.util.Map<String, List<ImageIcon>> CACHE = new java.util.HashMap<>();
+    private static final String CACHE_KEY_SEP = "_";
 
     public SpriteAnimator(String baseFolder, int frameDelayMs, int iconSizePx, boolean flipX) {
         this.baseFolder = baseFolder;
@@ -92,6 +94,13 @@ public class SpriteAnimator extends JLabel {
 
     // Reads all PNGs from assets/sprites/arthur/idle/ sorted by name
     private List<ImageIcon> loadFrames(String animName) {
+    String cacheKey = baseFolder + animName + CACHE_KEY_SEP + flipX;
+    
+    // Check if we already loaded this animation before
+    if (CACHE.containsKey(cacheKey)) {
+        return CACHE.get(cacheKey);
+    }
+
     List<ImageIcon> frames = new ArrayList<>();
     File folder = new File(baseFolder + animName + "/");
     if (!folder.exists() || !folder.isDirectory()) return frames;
@@ -105,53 +114,52 @@ public class SpriteAnimator extends JLabel {
             BufferedImage img = ImageIO.read(f);
             if (img == null) continue;
 
-            // ── Scale to iconSizePx on the LONGEST side, preserve aspect ratio ──
-            // This prevents skill frames from squishing the character when the
-            // canvas is wider than it is tall (e.g. a wide attack swing frame)
             int origW = img.getWidth();
             int origH = img.getHeight();
-
             int scaledW, scaledH;
+            
             if (origW >= origH) {
-                // Wider frame (e.g. attack swing) — fit width, scale height proportionally
                 scaledW = iconSizePx;
                 scaledH = (int)((double) origH / origW * iconSizePx);
             } else {
-                // Taller frame (e.g. idle standing) — fit height, scale width proportionally
                 scaledH = iconSizePx;
                 scaledW = (int)((double) origW / origH * iconSizePx);
             }
 
-            // Minimum size guard — never go below 10px
             scaledW = Math.max(scaledW, 10);
             scaledH = Math.max(scaledH, 10);
 
             Image scaled = img.getScaledInstance(scaledW, scaledH, Image.SCALE_SMOOTH);
 
-if (flipX) {
-    // Draw the scaled image onto a new canvas, mirrored left-right
-    BufferedImage flipped = new BufferedImage(scaledW, scaledH,
-                                              BufferedImage.TYPE_INT_ARGB);
-    java.awt.Graphics2D g2 = flipped.createGraphics();
-    g2.drawImage(scaled,
-        scaledW, 0,    // destination top-LEFT = right edge (start drawing from right)
-        0,       scaledH,  // destination bottom-RIGHT = left edge (end at left)
-        null);
-    g2.dispose();
-    frames.add(new ImageIcon(flipped));
-} else {
-    frames.add(new ImageIcon(scaled));
-}
-            frames.add(new ImageIcon(scaled));
+            if (flipX) {
+                BufferedImage flipped = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_ARGB);
+                java.awt.Graphics2D g2 = flipped.createGraphics();
+                // FIX: Corrected your flipping coordinates here
+                g2.drawImage(scaled, 0, 0, scaledW, scaledH, scaledW, 0, 0, scaledH, null);
+                g2.dispose();
+                frames.add(new ImageIcon(flipped));
+            } else {
+                frames.add(new ImageIcon(scaled));
+            }
 
         } catch (IOException e) {
-            System.out.println("Could not load sprite: " + f.getName());
+            System.out.println("Error loading: " + f.getName());
         }
     }
+    
+    // Save to cache so we never have to read these files again!
+    CACHE.put(cacheKey, frames);
     return frames;
 }
 
     public void stop() {
         if (timer != null) timer.stop();
+    }
+
+    // Clears loaded frame cache for a specific animator so it can't accumulate between skill animations.
+    // This is intentionally narrow: only clears the (baseFolder + animName + flipX) entry.
+    public static void clearCacheFor(String baseFolder, String animName, boolean flipX) {
+        String cacheKey = baseFolder + animName + CACHE_KEY_SEP + flipX;
+        CACHE.remove(cacheKey);
     }
 }

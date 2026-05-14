@@ -24,3 +24,5 @@ Mohammad,4,7,25,Dungeon
 Mohammad,4,7,25,Dungeon
 Ayan,0,0,0,Forest
 Ayan
+Pas,0,0,0,Forest
+Pas
