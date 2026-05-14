@@ -8,6 +8,11 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 public class MainMenuScreen extends JPanel {
 
@@ -16,13 +21,20 @@ public class MainMenuScreen extends JPanel {
     public MainMenuScreen(MainFrame frame) {
         loadWallpaper();                         // ← loads assets/wallpaper/menu_bg.png
         setLayout(new BorderLayout(0, 0));
+        
 
         // ── TOP NAV STRIP ──
         add(buildTopNav(frame), BorderLayout.NORTH);
 
         // ── CENTER: title + left content ──
         add(buildCenter(frame), BorderLayout.CENTER);
+        
     }
+    public void refresh() {
+    loadWallpaper(); // Pick a new random file
+    revalidate();    // Refresh layout
+    repaint();       // Redraw the screen with the new image
+}
 
     // ─────────────────────────────────────
     // BACKGROUND — wallpaper painted behind everything
@@ -65,9 +77,12 @@ public class MainMenuScreen extends JPanel {
         nav.setOpaque(false);
         nav.setBorder(BorderFactory.createEmptyBorder(12, 20, 8, 20));
 
+        Dimension sideWidth = new Dimension(350, 30);
+
         // Left: nav links
         JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 22, 0));
         links.setOpaque(false);
+        links.setPreferredSize(sideWidth);
 
         String[] items = {"HOME", "LEADERBOARD", "CREDITS"};
         for (String item : items) {
@@ -97,90 +112,106 @@ public class MainMenuScreen extends JPanel {
 
         // Center: game title
         JLabel title = new JLabel("KAKUSA WARS", SwingConstants.CENTER);
-        title.setFont(new Font("Serif", Font.BOLD, 28));   // ← change font size here
-        title.setForeground(new Color(240, 192, 96));
-        title.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+    title.setFont(new Font("Serif", Font.BOLD, 28));
+    title.setForeground(new Color(240, 192, 96));
+    // No specific width needed; it will take the remaining balanced space
 
-        // Right: version tag
-        JLabel ver = new JLabel("v1.0  ⚔");
-        ver.setFont(new Font("Monospaced", Font.PLAIN, 10));
-        ver.setForeground(new Color(100, 70, 30, 180));
+    // ── RIGHT: Version ──
+    // Put the version in a panel that matches the width of the left links
+    JPanel rightWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    rightWrapper.setOpaque(false);
+    rightWrapper.setPreferredSize(sideWidth); // Force width to match left side
 
-        nav.add(links,  BorderLayout.WEST);
-        nav.add(title,  BorderLayout.CENTER);
-        nav.add(ver,    BorderLayout.EAST);
-        return nav;
-    }
+    JLabel ver = new JLabel("v1.0  ⚔");
+    ver.setFont(new Font("Monospaced", Font.PLAIN, 10));
+    ver.setForeground(new Color(100, 70, 30, 180));
+    rightWrapper.add(ver);
+
+    // ── ADD TO NAV ──
+    nav.add(links,        BorderLayout.WEST);
+    nav.add(title,        BorderLayout.CENTER);
+    nav.add(rightWrapper, BorderLayout.EAST);
+    
+    return nav;
+}
 
     // ─────────────────────────────────────
     // CENTER CONTENT — big quote (left) + buttons
     // ─────────────────────────────────────
     private JPanel buildCenter(MainFrame frame) {
-        JPanel center = new JPanel(new BorderLayout(0, 0));
-        center.setOpaque(false);
-        center.setBorder(BorderFactory.createEmptyBorder(20, 44, 60, 44));
+    JPanel center = new JPanel(new BorderLayout(0, 0));
+    center.setOpaque(false);
+    
+    // Padding: T=80, L=60, B=60, R=44 (Keeps text away from screen edges)
+    center.setBorder(BorderFactory.createEmptyBorder(80, 60, 60, 44));
 
-        // LEFT COLUMN — quote + welcome + buttons
-        JPanel left = new JPanel();
-        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-        left.setOpaque(false);
+    JPanel left = new JPanel();
+    left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+    left.setOpaque(false);
 
-        // Big quote
-        JLabel quote = new JLabel(
-    "<html><center>FORGE YOUR<br>LEGEND<br>IN BATTLE</center></html>"
-);
-quote.setFont(new Font("Serif", Font.BOLD, 46));
-quote.setForeground(Color.WHITE);
-quote.setAlignmentX(LEFT_ALIGNMENT);
+    // ── 1. BIGGER QUOTE (The Hero Text) ──
+    JLabel quote = new JLabel("<html>FORGE YOUR<br>LEGEND<br>IN BATTLE</html>");
+    quote.setFont(new Font("Serif", Font.BOLD, 72)); 
+    quote.setForeground(Color.WHITE);
+    quote.setAlignmentX(LEFT_ALIGNMENT);
+    left.add(quote);
 
-        // Welcome text
-        JLabel welcome = new JLabel("Welcome, warrior. Your story begins here.");
-        welcome.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        welcome.setForeground(new Color(180, 150, 100, 200));
-        welcome.setAlignmentX(LEFT_ALIGNMENT);
-        welcome.setBorder(BorderFactory.createEmptyBorder(10, 0, 22, 0));
+    // Small gap between title and welcome sentence
+    left.add(Box.createVerticalStrut(20)); 
 
-        // ── Button row ──
-        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
-        btnRow.setOpaque(false);
-        btnRow.setAlignmentX(LEFT_ALIGNMENT);
+    // ── 2. BIGGER WELCOME (The Subtitle) ──
+    JLabel welcome = new JLabel("Welcome, warrior. Your story begins here.");
+    welcome.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+    welcome.setForeground(new Color(200, 180, 150));
+    welcome.setAlignmentX(LEFT_ALIGNMENT);
+    left.add(welcome);
 
-        JButton newGameBtn  = makeMenuBtn("⚔  NEW GAME",  new Color(120, 25, 25), new Color(255, 210, 100));
-        JButton continueBtn = makeMenuBtn("▶  CONTINUE",  new Color(40, 30, 15),  new Color(180, 140, 70));
+    // ── 3. THE "SPRING" (Vertical Glue) ──
+    // This fills ALL the empty space between the text above and buttons below.
+    left.add(Box.createVerticalGlue());
 
-        // Disable Continue if no valid save exists
-        boolean hasSave = SaveManager.hasSaveData();
-        continueBtn.setEnabled(hasSave);
-        continueBtn.setForeground(hasSave ? new Color(180, 140, 70) : new Color(80, 60, 30));
-        continueBtn.setToolTipText(hasSave ? "Resume your last session" : "No save data found");
+    // ── 4. BUTTON ROW ──
+    JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+    btnRow.setOpaque(false);
+    btnRow.setAlignmentX(LEFT_ALIGNMENT);
+    // Keep the button row height tight
+    btnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60)); 
 
-        newGameBtn.addActionListener(e -> {
-            // Clear any existing save, then go to username entry
-            SaveManager.clearSaveData();
-            frame.goToUsername();                 // ← UsernameScreen handles name entry
-        });
+    JButton newGameBtn  = makeMenuBtn("⚔   NEW GAME",  new Color(120, 25, 25), new Color(255, 210, 100));
+    JButton continueBtn = makeMenuBtn("▶   CONTINUE",  new Color(40, 30, 15),  new Color(180, 140, 70));
 
-        continueBtn.addActionListener(e -> {
-            if (frame.loadSavedGame()) {
-                frame.goToAreaSelect();           // ← drop straight back into the game
-            } else {
-                JOptionPane.showMessageDialog(frame,
-                    "Save data is corrupted or missing.",
-                    "Load Failed", JOptionPane.WARNING_MESSAGE);
-            }
-        });
+    // Save Data Logic
+    boolean hasSave = SaveManager.hasSaveData();
+    continueBtn.setEnabled(hasSave);
+    continueBtn.setForeground(hasSave ? new Color(180, 140, 70) : new Color(80, 60, 30));
+    continueBtn.setToolTipText(hasSave ? "Resume your last session" : "No save data found");
 
-        btnRow.add(newGameBtn);
-        btnRow.add(continueBtn);
+    newGameBtn.addActionListener(e -> {
+        SaveManager.clearSaveData();
+        frame.goToUsername();
+    });
 
-        left.add(quote);
-        left.add(welcome);
-        left.add(btnRow);
-        left.add(Box.createVerticalGlue());
+    continueBtn.addActionListener(e -> {
+        if (frame.loadSavedGame()) {
+            frame.goToAreaSelect();
+        } else {
+            JOptionPane.showMessageDialog(frame, "Save data is corrupted or missing.", "Load Failed", JOptionPane.WARNING_MESSAGE);
+        }
+    });
 
-        center.add(left, BorderLayout.WEST);
-        return center;
-    }
+    btnRow.add(newGameBtn);
+    btnRow.add(continueBtn);
+    
+    // Add the button row to the left panel
+    left.add(btnRow);
+
+    // ── 5. BOTTOM BREATHING ROOM ──
+    // Prevents buttons from being stuck to the very bottom edge
+    left.add(Box.createVerticalStrut(20)); 
+
+    center.add(left, BorderLayout.WEST);
+    return center;
+}
 
     // ─────────────────────────────────────
     // HELPERS
@@ -200,12 +231,43 @@ quote.setAlignmentX(LEFT_ALIGNMENT);
         return btn;
     }
 
-    private void loadWallpaper() {
-        // ← wallpaper file path — put your PNG at assets/wallpaper/menu_bg.png
-        File f = new File("assets/wallpaper/menu_bg.png");
-        if (!f.exists()) return;
+   private void loadWallpaper() {
+    // 1. Define the pairs: "Wallpaper_Filename" -> "Music_Filename"
+    // Tip: Make sure these names match your files exactly!
+    Map<String, String> themes = new HashMap<>();
+    themes.put("menu_bg.png",      "adventure.wav");
+    themes.put("green_bg.png",    "soft.wav");
+    themes.put("dragon_bg.png",    "dragon.wav");
+    themes.put("desert_bg.png",    "desert.wav");
+    themes.put("gold_bg.png",    "tribe.wav");
+    themes.put("arthur.png",    "arthur.wav");
+
+
+    // 2. Convert the map keys to a list so we can pick one randomly
+    List<String> wallpaperNames = new ArrayList<>(themes.keySet());
+    
+    if (!wallpaperNames.isEmpty()) {
+        // 3. Pick a random theme
+        int randomIndex = new java.util.Random().nextInt(wallpaperNames.size());
+        String selectedImgName = wallpaperNames.get(randomIndex);
+        String selectedMusic = themes.get(selectedImgName);
+
         try {
-            wallpaper = ImageIO.read(f);
-        } catch (IOException ignored) {}
+            // 4. Load the Image
+            File imgFile = new File("assets/wallpaper/" + selectedImgName);
+            if (imgFile.exists()) {
+                this.wallpaper = ImageIO.read(imgFile);
+            }
+
+            // 5. Play the synced Music
+            // We call our MusicManager here so the song matches the vibe
+            io.MusicManager.play(selectedMusic, true);
+
+        } catch (IOException e) {
+            System.err.println("Theme Load Error: " + e.getMessage());
+            // Fallback: If specific music fails, play a default
+            io.MusicManager.play("menu_theme.wav", true);
+        }
     }
+}
 }

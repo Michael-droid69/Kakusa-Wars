@@ -14,6 +14,7 @@ public class MainFrame extends JFrame {
     // ── CardLayout swaps which panel is visible ──
     private final CardLayout layout = new CardLayout();
     private final JPanel     root   = new JPanel(layout);
+    private MainMenuScreen   mainMenuScreen;    
 
     // ── Shared game state — all screens read/write these ──
     private String                username       = "Player";
@@ -32,24 +33,34 @@ public class MainFrame extends JFrame {
         setMinimumSize(new Dimension(1440, 680));
         setLocationRelativeTo(null);
         setResizable(false);
-        getContentPane().add(root);
-        setVisible(true);
 
-        // Start on the username screen
-        goToMainMenu();
+        
+        mainMenuScreen = new MainMenuScreen(this);
+        root.add(mainMenuScreen, "mainmenu");
+        
+        getContentPane().add(root);
+
+        goToMainMenu(); 
+        // Music is now handled inside the goToMainMenu method
+        setVisible(true);
     }
 
-    // ─────────────────────────────────────────────────
-    // NAVIGATION METHODS — each screen calls one of these
-    // ─────────────────────────────────────────────────
-
+    
     public void goToMainMenu() {
-    addScreen(new MainMenuScreen(this), "mainmenu");
-    layout.show(root, "mainmenu");
-}
+        // Play theme music
+        io.MusicManager.play("menu_theme.wav", true);
+        
+        // Refresh the wallpaper (the method we added to MainMenuScreen)
+        if (mainMenuScreen != null) {
+            mainMenuScreen.refresh();
+        }
+        
+        // Show the panel
+        layout.show(root, "mainmenu");
+    }
 
 public void goToLeaderboard() {
-    addScreen(new LeaderboardScreen(this), "leaderboard");
+    addScreen(new LeaderboardScreen(this), "leaderboard");  
     layout.show(root, "leaderboard");
 }
     public void goToUsername() {
@@ -67,7 +78,9 @@ public void goToLeaderboard() {
         layout.show(root, "areaselect");
     }
 
+
     public void goToBattle() {
+        io.MusicManager.stop();
         addScreen(new BattleScreen(this), "battle_" + currentArea + "_" + currentWave);
         layout.show(root, "battle_" + currentArea + "_" + currentWave);
     }
