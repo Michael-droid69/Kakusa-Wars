@@ -82,7 +82,6 @@ public class UsernameScreen extends JPanel {
         JButton startBtn = makeButton("▶   Start New Game", new Color(60, 30, 140), Color.WHITE);
         g.gridy = 4; frostedCard.add(startBtn, g);
 
-        // ADD THIS PART BACK IN:
         startBtn.addActionListener(e -> {
             String name = nameField.getText().trim();
             try {
@@ -106,17 +105,7 @@ public class UsernameScreen extends JPanel {
             }
         });
 
-        if (io.SaveManager.hasSaveFile()) {
-            JButton continueBtn = makeButton("⟳   Continue Saved Game", new Color(25, 50, 40), new Color(120, 255, 180));
-            g.gridy = 5; frostedCard.add(continueBtn, g);
-            
-            // ADD THIS BACK TOO:
-            continueBtn.addActionListener(e -> {
-                if (frame.loadSavedGame()) {
-                    frame.goToBattle();
-                }
-            });
-        }
+        // Continue button removed — it lives on the main landing page instead
 
         // 3. THE "NOT-CORNERED" LEFT ALIGNMENT
         // We put the card in a wrapper with a Large Left Margin (EmptyBorder)

@@ -193,7 +193,7 @@ public class MainMenuScreen extends JPanel {
 
     continueBtn.addActionListener(e -> {
         if (frame.loadSavedGame()) {
-            frame.goToAreaSelect();
+            frame.goToBattle();
         } else {
             JOptionPane.showMessageDialog(frame, "Save data is corrupted or missing.", "Load Failed", JOptionPane.WARNING_MESSAGE);
         }
