@@ -16,6 +16,7 @@ public class Star extends Character {
         addSkill(new Skill("Spin Swing",         "Spins axe in wide arc, hits all enemies, 110% ATK", 40, 1.1, "damage"));
         addSkill(new Skill("Dragon Fire Breath", "Transforms and breathes fire, 180% ATK to all", 65, 1.8, "damage"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override

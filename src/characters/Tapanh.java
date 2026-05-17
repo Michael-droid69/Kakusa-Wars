@@ -17,6 +17,7 @@ public class Tapanh extends Character {
         addSkill(new Skill("Pause Punch",    "Gathers power, unleashes devastating punch, 200% ATK", 50, 2.0, "damage"));
         addSkill(new Skill("Bull Slam",      "Transforms into bull, ground slam hits all, 150% ATK", 60, 1.5, "damage"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override

@@ -1,0 +1,12 @@
+# Compiled Java class files
+bin/
+*.class
+
+# Save data (runtime files, not source)
+saves/
+players.txt
+
+# IDE / OS files
+.vscode/
+*.DS_Store
+Thumbs.db

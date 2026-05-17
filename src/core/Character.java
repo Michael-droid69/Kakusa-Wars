@@ -54,6 +54,16 @@ public abstract class Character {
     }
 
     // ─────────────────────────────────────────
+    // MANA INIT HELPER
+    // Characters start with low mana (25% of max) so only the
+    // cheapest skill is available at turn 1. Mana grows each turn.
+    // ─────────────────────────────────────────
+    protected void initStartingMana() {
+        // Start at 25% of max mana (minimum 15 so basic skills are reachable quickly)
+        this.mana = Math.max(15, this.maxMana / 4);
+    }
+
+    // ─────────────────────────────────────────
     // ABSTRACT METHODS  (Abstraction + Polymorphism)
     // Every subclass MUST override these three
     // ─────────────────────────────────────────
@@ -98,8 +108,9 @@ public abstract class Character {
     }
 
     // Called at the end of every turn for the whole party
+    // Regen is 15 MP per turn so skills unlock progressively during battle
     public void regenManaPerTurn() {
-        restoreMana(10);
+        restoreMana(15);
     }
 
     // ─────────────────────────────────────────

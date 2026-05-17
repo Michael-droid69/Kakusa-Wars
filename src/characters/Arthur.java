@@ -16,6 +16,7 @@ public class Arthur extends Character {
         addSkill(new Skill("Multi Slash",  "Rapid 3-hit combo, each hit 50% ATK",           35, 1.5,  "damage")); // 3 × 0.5 = 150% total
         addSkill(new Skill("Ground Slash", "Slams blade into earth, shockwave hits all, 130% ATK", 55, 1.3, "damage"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override

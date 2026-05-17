@@ -16,6 +16,7 @@ public class Fabby extends Character {
         addSkill(new Skill("Cry Puddle",       "Cries a healing puddle, restores 30% max HP to self & allies", 40, 0.0, "heal"));
         addSkill(new Skill("Laser Water Eyes", "Fires tear lasers at target, 60% ATK (low dmg but real)", 30, 0.6, "damage"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override

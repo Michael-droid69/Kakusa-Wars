@@ -16,6 +16,7 @@ public class Mohammad extends Character {
         addSkill(new Skill("Cluster Bombs",  "Throws one bomb that splits into 4, hits all, 90% ATK each", 50, 3.6, "damage")); // 4 × 0.9 total represented
         addSkill(new Skill("Self Destruct",  "Charges enemy & detonates, 250% ATK to target, 60% to allies, leaves self at 50% HP", 70, 2.5, "damage"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override

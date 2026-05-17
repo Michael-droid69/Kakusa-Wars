@@ -976,6 +976,11 @@ animators.put("party_card_" + i, anim);
             log(target.getName() + " was defeated!");
             frame.addEnemyKill();
 
+            // Award gold loot
+            int gold = BattleEngine.rollGoldDrop(target, frame.getCurrentWave());
+            frame.addGold(gold);
+            log("💰 Looted " + gold + " gold from " + target.getName() + "!");
+
             SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
             if (deathAnim != null) {
                 // stop idle loop so we don't keep ticking a "dead" enemy sprite
@@ -1028,8 +1033,27 @@ animators.put("party_card_" + i, anim);
         if (skill.getType().equals("damage_all")) {
             BattleEngine.playerSkillAoe(actor, skillIndex, enemies)
                 .forEach(r -> log(r.message));
+            // Check each enemy for death after AoE
+            for (int i = 0; i < enemies.size(); i++) {
+                Character e = enemies.get(i);
+                if (!e.isAlive()) {
+                    log(e.getName() + " was defeated!");
+                    frame.addEnemyKill();
+                    int gold = BattleEngine.rollGoldDrop(e, frame.getCurrentWave());
+                    frame.addGold(gold);
+                    log("💰 Looted " + gold + " gold from " + e.getName() + "!");
+                }
+            }
         } else {
-            log(BattleEngine.playerSkill(actor, skillIndex, target).message);
+            BattleEngine.AttackResult r = BattleEngine.playerSkill(actor, skillIndex, target);
+            log(r.message);
+            if (!target.isAlive()) {
+                log(target.getName() + " was defeated!");
+                frame.addEnemyKill();
+                int gold = BattleEngine.rollGoldDrop(target, frame.getCurrentWave());
+                frame.addGold(gold);
+                log("💰 Looted " + gold + " gold from " + target.getName() + "!");
+            }
         }
         updateAllBars();
         checkWaveOver();
@@ -1128,7 +1152,7 @@ animators.put("party_card_" + i, anim);
     private void doEnemyTurns() {
         for (Character enemy : enemies) {
             if (!enemy.isAlive()) continue;
-            String result = BattleEngine.enemyTurn(enemy, party);
+            String result = BattleEngine.enemyTurn(enemy, party, frame.getCurrentWave());
 
             // Handle taunt prefix
             if (result.startsWith("TAUNT:")) {

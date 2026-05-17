@@ -17,6 +17,7 @@ public class Van extends Character {
         addSkill(new Skill("Flying Blow Kiss", "Sends a devastating kiss projectile, stuns or drains 40% HP", 40, 0.4, "damage"));
         addSkill(new Skill("Summon Wives",     "Summons 3 warrior wives to protect Van for 3 turns (taunt)", 60, 0.0, "buff"));
         applyPassive();
+        initStartingMana();
     }
 
     @Override
