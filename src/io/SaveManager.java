@@ -9,8 +9,8 @@ public class SaveManager {
     private static final String SAVE_PATH   = "saves/save_data.txt";
     private static final String PLAYER_LOG  = "players.txt";
 
-    private static final String SAVE_FILE    = "save_data.txt";   // ← active session
-private static final String PLAYERS_FILE = "players.txt";     // ← all-time records
+    private static final String SAVE_FILE    = "saves/save_data.txt"; // ← active session
+    private static final String PLAYERS_FILE = "players.txt";         // ← all-time records
 
 /**
  * Returns true if save_data.txt exists and contains a "username=" line.
