@@ -207,27 +207,25 @@ public static java.util.List<String[]> loadLeaderboard() {
         int size = Integer.parseInt(data.getOrDefault("partySize", "0"));
 
         for (int i = 0; i < size; i++) {
+            // class is saved as the simple class name e.g. "Arthur", "Fabby", "Mohammad"
             String cls  = data.getOrDefault("party" + i + ".class", "Arthur");
             String name = data.getOrDefault("party" + i + ".name",  "Hero");
-            int    hp   = Integer.parseInt(data.getOrDefault("party" + i + ".hp",   "100"));
-            int    mana = Integer.parseInt(data.getOrDefault("party" + i + ".mana", "50"));
 
+            // Reconstruct the correct character type using the actual class name
+            // HP and mana are intentionally reset to full (fresh start feel)
+            // — only wave, area, gold, and inventory carry over
             core.Character c = switch (cls) {
-                case "Arthur"  -> new characters.Arthur(name);
-                case "Mage"    -> new characters.Fabby(name);
-                case "Archer"  -> new characters.Tapanh(name);
-                case "Rogue"   -> new characters.Van(name);
-                case "Paladin" -> new characters.Star(name);
-                default        -> new characters.Arthur(name);
+                case "Arthur"   -> new characters.Arthur(name);
+                case "Fabby"    -> new characters.Fabby(name);
+                case "Mohammad" -> new characters.Mohammad(name);
+                case "Star"     -> new characters.Star(name);
+                case "Tapanh"   -> new characters.Tapanh(name);
+                case "Van"      -> new characters.Van(name);
+                default         -> new characters.Arthur(name);
             };
 
-            // Force HP and mana to saved values
-            // (constructor sets them to max, so we need to override)
-            int hpDiff = c.getMaxHp() - hp;
-            if (hpDiff > 0) c.takeDamage(hpDiff);
-            int manaDiff = c.getMaxMana() - mana;
-            if (manaDiff > 0) c.spendManaUnsafe(manaDiff);
-
+            // HP and mana start fresh (initStartingMana already called in constructor)
+            // No override needed — character is ready to fight at full health
             party.add(c);
         }
         return party;
