@@ -1023,13 +1023,6 @@ animators.put("party_card_" + i, anim);
     };
 
     Runnable onDamage = () -> {
-        // SKILL FINISH CACHE CLEAR (#3 requirement):
-        // when the skill animation finishes (playOnce onComplete calls onDamage.run),
-        // clear cached frames for skill3 to prevent any cache/timer buildup.
-        if (skillIndex == 2) {
-            SpriteAnimator.clearCacheFor(actor.getSpriteFolder(), "skill3", false);
-        }
-
         if (skill.getType().equals("damage_all")) {
             BattleEngine.playerSkillAoe(actor, skillIndex, enemies)
                 .forEach(r -> log(r.message));
@@ -1226,6 +1219,9 @@ animators.put("party_card_" + i, anim);
                 if (anim != null) anim.stop();
             }
             animators.clear();
+            // Wipe the entire sprite frame cache so the previous wave's
+            // enemy and character frames don't sit in memory during the next wave.
+            SpriteAnimator.clearAllCache();
 
             // Save game, go to shop, then next wave
             frame.saveCurrentGame();

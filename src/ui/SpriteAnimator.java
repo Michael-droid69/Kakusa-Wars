@@ -65,6 +65,8 @@ public class SpriteAnimator extends JLabel {
 
     // Play an animation once, then go back to idle automatically.
     // onComplete runs after the last frame.
+    // Cache for the one-shot animation is cleared after it finishes
+    // so transient animations (attack, skill1-3, death) don't sit in memory.
     public void playOnce(String animName, Runnable onComplete) {
         List<ImageIcon> frames = loadFrames(animName);
         if (frames.isEmpty()) {
@@ -79,6 +81,10 @@ public class SpriteAnimator extends JLabel {
 
         int totalTimeMs = frames.size() * frameDelayMs;
         Timer once = new Timer(totalTimeMs, e -> {
+            // Clear this one-shot animation from cache — it won't be needed
+            // again until the next time it's explicitly triggered, so there's
+            // no point keeping all those ImageIcon frames in memory.
+            clearCacheFor(baseFolder, animName, flipX);
             play("idle");
             onComplete.run();
         });
@@ -161,5 +167,11 @@ public class SpriteAnimator extends JLabel {
     public static void clearCacheFor(String baseFolder, String animName, boolean flipX) {
         String cacheKey = baseFolder + animName + CACHE_KEY_SEP + flipX;
         CACHE.remove(cacheKey);
+    }
+
+    // Wipes the entire frame cache. Call this between waves so sprites
+    // from the previous wave don't sit in memory during the next one.
+    public static void clearAllCache() {
+        CACHE.clear();
     }
 }
