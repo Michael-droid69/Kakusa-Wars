@@ -1,10 +1,14 @@
 # Compiled Java class files
+# Ignore compiled Java class files
 bin/
+out/
+target/
 *.class
 
-# Save data (runtime files, not source)
-saves/
+# Ignore local game saves and player logs
 players.txt
+saves/
+*.txt
 
 # IDE / OS files
 .vscode/
