@@ -48,7 +48,7 @@ public class MainFrame extends JFrame {
     
     public void goToMainMenu() {
         // Play theme music
-        io.MusicManager.play("menu_theme.wav", true);
+        io.MusicManager.play("adventure.wav", true);
         
         // Refresh the wallpaper (the method we added to MainMenuScreen)
         if (mainMenuScreen != null) {

@@ -13,6 +13,9 @@ public class MusicManager {
 
         try {
             File file = new File("assets/audio/" + fileName);
+            // Silently skip if the file doesn't exist — audio is non-critical
+            if (!file.exists()) return;
+
             AudioInputStream stream = AudioSystem.getAudioInputStream(file);
             clip = AudioSystem.getClip();
             clip.open(stream);
@@ -22,7 +25,7 @@ public class MusicManager {
             }
             clip.start();
         } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
-            System.err.println("Audio Error: " + e.getMessage());
+            // Audio failure is non-fatal — game continues without music
         }
     }
 
