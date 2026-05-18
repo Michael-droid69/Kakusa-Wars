@@ -52,10 +52,7 @@ public class CharacterSelectScreen extends JPanel {
             new characters.Van("Van")
         );
 
-        // We want "only accommodate 3 per screen". With a scrollable Y container,
-        // we can emulate this by using a 3-wide row layout.
-// Since there are 6 cards total, using 2 columns will give 3 rows.
-// This matches your preference: "2 cards per screen" with visible gaps.
+
         for (core.Character c : pool) {
     JPanel card = buildCard(c, frame);
     cards.add(card);

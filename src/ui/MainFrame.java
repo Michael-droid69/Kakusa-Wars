@@ -34,6 +34,20 @@ public class MainFrame extends JFrame {
         setLocationRelativeTo(null);
         setResizable(false);
 
+        // ═══════════════════════════════════════════════════════════
+        // PROFESSIONAL OPTIMIZATION: JVM Performance Hints
+        // ═══════════════════════════════════════════════════════════
+        
+        // Enable hardware acceleration for Swing components
+        System.setProperty("sun.java2d.opengl", "true");
+        System.setProperty("sun.java2d.d3d", "true");
+        
+        // Optimize Swing rendering
+        System.setProperty("swing.aatext", "true"); // Smooth text
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        
+        // Reduce repaint overhead
+        root.setDoubleBuffered(true);
         
         mainMenuScreen = new MainMenuScreen(this);
         root.add(mainMenuScreen, "mainmenu");

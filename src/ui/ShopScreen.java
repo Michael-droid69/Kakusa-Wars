@@ -28,6 +28,9 @@ public class ShopScreen extends JPanel {
         // Stop battle music and play shop music
         io.MusicManager.playShopMusic();
         
+        // Play merchant speech (once, no loop)
+        io.MusicManager.playSoundEffect("speech.wav");
+        
         // Load background image
         loadBackgroundImage();
 

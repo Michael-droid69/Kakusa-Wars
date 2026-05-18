@@ -9,12 +9,14 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import java.awt.BorderLayout;
@@ -92,6 +94,12 @@ public class BattleScreen extends JPanel {
         // Start battle music for this area
         io.MusicManager.playBattleMusic(frame.getCurrentArea());
 
+        // ═══════════════════════════════════════════════════════════
+        // PROFESSIONAL OPTIMIZATION: Enable hardware acceleration
+        // ═══════════════════════════════════════════════════════════
+        setDoubleBuffered(true); // Prevent flickering
+        setOpaque(true);         // Faster rendering for opaque panels
+        
         setLayout(new BorderLayout(0, 0));
         setBackground(new Color(8, 6, 14));
 
@@ -173,9 +181,8 @@ public class BattleScreen extends JPanel {
         goldLabel.setForeground(new Color(201, 148, 58));
         rightRow.add(goldLabel);
 
-        rightRow.add(makeTopBtn("Flee",      new Color(184,50,50),   new Color(220,100,100)));
-        rightRow.add(makeTopBtn("Shop",      new Color(100,70,10),   new Color(201,148,58)));
         rightRow.add(makeTopBtn("Inventory", new Color(30, 50,120),  new Color(100,150,240)));
+        rightRow.add(makeTopBtn("Flee",      new Color(184,50,50),   new Color(220,100,100)));
 
         bar.add(waveLabel, BorderLayout.WEST);
         bar.add(avatarRow, BorderLayout.CENTER);
@@ -195,7 +202,6 @@ public class BattleScreen extends JPanel {
         btn.addActionListener(e -> {
             switch (text) {
                 case "Flee"      -> doFlee();
-                case "Shop"      -> frame.goToShop();
                 case "Inventory" -> doItem();
             }
         });
@@ -217,8 +223,8 @@ public class BattleScreen extends JPanel {
             slot.setLayout(new BoxLayout(slot, BoxLayout.Y_AXIS));
             slot.setBackground(new Color(14, 10, 22));
 
-            // Smaller + faster sprites on battle screen
-            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 33, 95);
+            // Pixel art style: slower animation for chunky feel
+            SpriteAnimator anim = new SpriteAnimator(e.getSpriteFolder(), 80, 95);
             anim.setAlignmentX(CENTER_ALIGNMENT);
             animators.put("enemy_" + i, anim);
 
@@ -242,10 +248,7 @@ slot.add(nameLabel);
             slot.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
                     if (!enemies.get(idx).isAlive()) {
-                        JOptionPane.showMessageDialog(frame,
-                            enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.",
-                            "Invalid Target",
-                            JOptionPane.WARNING_MESSAGE);
+                        showInfoPopup(enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.", "⚠ Invalid Target");
                         return;
                     }
                     selectedTarget = idx;
@@ -372,7 +375,7 @@ private JPanel getEnemySlot(int index) {
     slot.setOpaque(false);
 
     // ── 1. Sprite animator fills the whole slot ──
-    SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 33, spriteSize);
+    SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 80, spriteSize);
     anim.setBounds(0, 0, spriteSize, spriteSize);   // full slot width and height
     animators.put(key, anim);
     slot.add(anim);
@@ -404,10 +407,7 @@ private JPanel getEnemySlot(int index) {
         slot.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
                 if (!enemies.get(idx).isAlive()) {
-                    JOptionPane.showMessageDialog(frame,
-                        enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.",
-                        "Invalid Target",
-                        JOptionPane.WARNING_MESSAGE);
+                    showInfoPopup(enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.", "⚠ Invalid Target");
                     return;
                 }
                 selectedTarget = idx;
@@ -441,6 +441,9 @@ private void approachAndAttack(String key, JPanel targetSlot,
     // Record the attacker's starting position
     int startX = attackerSlot.getX();
     int startY = attackerSlot.getY();
+    
+    // Check if this is a skill animation (should be scaled up)
+    boolean isSkill = animName.startsWith("skill");
 
     // Calculate where the enemy target is — we want to stop just beside it
     // targetSlot.getX() is in the battlefield panel's coordinate space
@@ -467,7 +470,7 @@ private void approachAndAttack(String key, JPanel targetSlot,
             attackerSlot.setLocation(approachX, startY);
             slideIn.stop();
 
-            // ── Step 2: Play the attack animation ──
+            // ── Step 2: Play the attack animation (with scaling for skills) ──
             if (anim != null) {
                 anim.playOnce(animName, () -> {
                     onDamage.run();
@@ -485,7 +488,7 @@ private void approachAndAttack(String key, JPanel targetSlot,
                         }
                     });
                     slideOut.start();
-                });
+                }, isSkill); // ← Pass isSkill flag for scaling
             } else {
                 onDamage.run();
             }
@@ -647,8 +650,8 @@ private void approachAndAttack(String key, JPanel targetSlot,
             partySection.add(card);
 
             // Sprite animator for this character (bottom zone)
-            // Smaller + faster sprites on bottom party strip
-            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 33, 70);
+            // Pixel art style: slower animation for chunky feel
+            SpriteAnimator anim = new SpriteAnimator(c.getSpriteFolder(), 80, 70);
 animators.put("party_card_" + i, anim);
 
             // Health bar
@@ -830,10 +833,7 @@ animators.put("party_card_" + i, anim);
         card.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
                 if (!e.isAlive()) {
-                    JOptionPane.showMessageDialog(frame,
-                        e.getName() + " is already dead!\nSelect a living enemy.",
-                        "Invalid Target",
-                        JOptionPane.WARNING_MESSAGE);
+                    showInfoPopup(e.getName() + " is already dead!\nSelect a living enemy.", "⚠ Invalid Target");
                     return;
                 }
                 selectedTarget = enemyIndex;
@@ -1020,18 +1020,171 @@ animators.put("party_card_" + i, anim);
     }
 
     // ─────────────────────────────────────────────────
-    // COMBAT POPUP — shows a JOptionPane after animation,
-    // logs the message when player clicks OK, then runs next step.
+    // STYLED POPUP HELPERS — consistent RPG dialog design
+    // Worker-thread approach keeps EDT free so idle animations never freeze.
     // ─────────────────────────────────────────────────
+
+    /** Builds the shared styled content panel used by every popup. */
+    private JPanel buildPopupContent(String message) {
+        JPanel content = new JPanel(new BorderLayout(12, 16));
+        content.setBackground(new Color(18, 14, 28));
+        content.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(120, 90, 40), 2),
+            BorderFactory.createEmptyBorder(24, 28, 18, 28)
+        ));
+
+        String html = "<html><div style='width:340px; font-size:13pt; "
+                    + "font-family:Serif; color:#E8D8A0; text-align:center;'>"
+                    + message.replace("\n", "<br>")
+                    + "</div></html>";
+        JLabel msgLabel = new JLabel(html, SwingConstants.CENTER);
+        content.add(msgLabel, BorderLayout.CENTER);
+        return content;
+    }
+
+    /** Builds the shared styled OK button. */
+    private JButton buildOkButton() {
+        JButton okBtn = new JButton("OK");
+        okBtn.setFont(new Font("Serif", Font.BOLD, 15));
+        okBtn.setBackground(new Color(80, 55, 20));
+        okBtn.setForeground(new Color(240, 200, 100));
+        okBtn.setFocusPainted(false);
+        okBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(140, 100, 40), 2),
+            BorderFactory.createEmptyBorder(8, 40, 8, 40)
+        ));
+        okBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        okBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseEntered(java.awt.event.MouseEvent e) {
+                okBtn.setBackground(new Color(110, 75, 30));
+            }
+            @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                okBtn.setBackground(new Color(80, 55, 20));
+            }
+        });
+        return okBtn;
+    }
+
+    /**
+     * Shows a styled RPG popup on a worker thread so the EDT stays free.
+     * Idle animations keep running while the dialog is open.
+     * afterOk runs on the EDT after the player dismisses.
+     */
     private void showCombatPopup(String message, Runnable afterOk) {
-        JOptionPane.showMessageDialog(
-            frame,
-            message,
-            "⚔ Battle",
-            JOptionPane.PLAIN_MESSAGE
-        );
-        log(message);
-        afterOk.run();
+        Thread t = new Thread(() -> {
+            JPanel content = buildPopupContent(message);
+            JButton okBtn  = buildOkButton();
+
+            JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            btnRow.setOpaque(false);
+            btnRow.add(okBtn);
+            content.add(btnRow, BorderLayout.SOUTH);
+
+            JOptionPane pane = new JOptionPane(content,
+                JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION,
+                null, new Object[]{}, null);
+            JDialog dialog = pane.createDialog(frame, "⚔  Battle");
+            dialog.setSize(480, 240);
+            dialog.setLocationRelativeTo(frame);
+            dialog.getRootPane().setDefaultButton(okBtn);
+            okBtn.addActionListener(e -> dialog.dispose());
+
+            dialog.setVisible(true); // blocks worker thread only
+
+            SwingUtilities.invokeLater(() -> { log(message); afterOk.run(); });
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Same styled popup but for simple info messages (no afterOk callback).
+     * Blocks the worker thread; EDT stays free.
+     */
+    private void showInfoPopup(String message, String title) {
+        Thread t = new Thread(() -> {
+            JPanel content = buildPopupContent(message);
+            JButton okBtn  = buildOkButton();
+
+            JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            btnRow.setOpaque(false);
+            btnRow.add(okBtn);
+            content.add(btnRow, BorderLayout.SOUTH);
+
+            JOptionPane pane = new JOptionPane(content,
+                JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION,
+                null, new Object[]{}, null);
+            JDialog dialog = pane.createDialog(frame, title);
+            dialog.setSize(480, 240);
+            dialog.setLocationRelativeTo(frame);
+            dialog.getRootPane().setDefaultButton(okBtn);
+            okBtn.addActionListener(e -> dialog.dispose());
+
+            dialog.setVisible(true);
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Styled input chooser — replaces JOptionPane.showInputDialog.
+     * Returns the selected string, or null if cancelled.
+     * Runs on the EDT (caller must handle threading if needed).
+     */
+    private String showStyledChooser(String message, String title, String[] options) {
+        JPanel content = buildPopupContent(message);
+
+        // Option buttons panel
+        JPanel optPanel = new JPanel(new GridLayout(0, 1, 0, 6));
+        optPanel.setOpaque(false);
+        optPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+
+        String[] result = {null};
+        JDialog[] dialogRef = {null};
+
+        for (String opt : options) {
+            JButton btn = new JButton(opt);
+            btn.setFont(new Font("Serif", Font.PLAIN, 14));
+            btn.setBackground(new Color(30, 22, 40));
+            btn.setForeground(new Color(220, 210, 190));
+            btn.setFocusPainted(false);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(80, 60, 100), 1),
+                BorderFactory.createEmptyBorder(6, 12, 6, 12)
+            ));
+            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            btn.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseEntered(java.awt.event.MouseEvent e) {
+                    btn.setBackground(new Color(50, 38, 65));
+                }
+                @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                    btn.setBackground(new Color(30, 22, 40));
+                }
+            });
+            btn.addActionListener(e -> {
+                result[0] = opt;
+                if (dialogRef[0] != null) dialogRef[0].dispose();
+            });
+            optPanel.add(btn);
+        }
+
+        JScrollPane scroll = new JScrollPane(optPanel);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setPreferredSize(new Dimension(340, Math.min(options.length * 46, 200)));
+        content.add(scroll, BorderLayout.SOUTH);
+
+        JOptionPane pane = new JOptionPane(content,
+            JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION,
+            null, new Object[]{}, null);
+        JDialog dialog = pane.createDialog(frame, title);
+        dialogRef[0] = dialog;
+        dialog.setSize(480, Math.min(160 + options.length * 50, 500));
+        dialog.setLocationRelativeTo(frame);
+        dialog.setVisible(true);
+
+        return result[0];
     }
 
     // ─────────────────────────────────────────────────
@@ -1232,9 +1385,7 @@ animators.put("party_card_" + i, anim);
         Character actor = party.get(activeCharIndex);
 
         if (inventory.isEmpty()) {
-            JOptionPane.showMessageDialog(frame,
-                "Your bag is empty!", "No Items",
-                JOptionPane.WARNING_MESSAGE);
+            showInfoPopup("Your bag is empty!", "🎒 No Items");
             return;
         }
 
@@ -1242,9 +1393,7 @@ animators.put("party_card_" + i, anim);
         String[] options = inventory.stream()
             .map(Item::toString).toArray(String[]::new);
 
-        String picked = (String) JOptionPane.showInputDialog(frame,
-            "Choose an item:", "Use Item",
-            JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+        String picked = showStyledChooser("Choose an item:", "🎒 Use Item", options);
 
         if (picked == null) return; // cancelled
 
@@ -1267,16 +1416,14 @@ animators.put("party_card_" + i, anim);
             String reason = isRevive
                 ? "No fallen allies to revive!"
                 : "No living allies to use this on!";
-            JOptionPane.showMessageDialog(frame, reason, "Can't Use", JOptionPane.WARNING_MESSAGE);
+            showInfoPopup(reason, "⚠ Can't Use");
             return;
         }
 
         // Choose target from valid list only
         String[] targetNames = validTargets.stream()
             .map(Character::getName).toArray(String[]::new);
-        String targetName = (String) JOptionPane.showInputDialog(frame,
-            "Use on who?", "Select Target",
-            JOptionPane.PLAIN_MESSAGE, null, targetNames, targetNames[0]);
+        String targetName = showStyledChooser("Use on who?", "🎒 Select Target", targetNames);
         if (targetName == null) return;
 
         Character target = validTargets.stream()
@@ -1288,21 +1435,30 @@ animators.put("party_card_" + i, anim);
             // Show popup: "Van used Health Potion → Arthur recovered 80 HP!"
             String popupMsg = actor.getName() + " used " + chosenItem.getName()
                 + "\n→ " + effectMsg;
-            JOptionPane.showMessageDialog(frame, popupMsg, "🎒 Item Used", JOptionPane.PLAIN_MESSAGE);
+            showInfoPopup(popupMsg, "🎒 Item Used");
             log(popupMsg.replace("\n→ ", " — "));
 
-            // If revived, restart their idle animation
+            // If revived, restart their animator and animation
             if (isRevive && target.isAlive()) {
-                SpriteAnimator reviveAnim = animators.get("party_" + party.indexOf(target));
-                if (reviveAnim != null) reviveAnim.play("idle");
+                // Revive the main battlefield animator
+                SpriteAnimator mainAnim = animators.get("party_" + party.indexOf(target));
+                if (mainAnim != null) {
+                    mainAnim.revive(); // Restart animator and load idle animation
+                }
+                
+                // Revive the bottom card animator
+                SpriteAnimator cardAnim = animators.get("party_card_" + party.indexOf(target));
+                if (cardAnim != null) {
+                    cardAnim.revive(); // Restart animator and load idle animation
+                }
+                
                 rebuildBottomBar(); // refresh card so it's no longer greyed out
             }
 
             updateAllBars();
             endPlayerTurn();
         } catch (exceptions.EmptyInventoryException ex) {
-            JOptionPane.showMessageDialog(frame, ex.getMessage(),
-                "Empty Bag", JOptionPane.WARNING_MESSAGE);
+            showInfoPopup(ex.getMessage(), "🎒 Empty Bag");
         }
     }
 
@@ -1443,9 +1599,7 @@ animators.put("party_card_" + i, anim);
             return;
         }
         String msg = messages.get(index);
-        JOptionPane.showMessageDialog(frame, msg, "👹 Enemy Turn", JOptionPane.PLAIN_MESSAGE);
-        log(msg);
-        showEnemyPopupChain(messages, index + 1, onDone);
+        showCombatPopup(msg, () -> showEnemyPopupChain(messages, index + 1, onDone));
     }
 
     private void advanceActiveCharacter() {
@@ -1468,15 +1622,38 @@ animators.put("party_card_" + i, anim);
      * Clears animation cache for non-essential animations.
      * Called after each turn to prevent memory buildup.
      * Only keeps idle animations cached, clears all attack/skill animations.
+     * 
+     * OPTIMIZATION: Aggressive cache clearing prevents memory leaks
      */
     private void clearUnusedAnimationCache() {
-        // Force garbage collection hint (JVM decides if it actually runs)
+        // Clear attack/skill animations for all party members
+        for (Character c : party) {
+            if (c.isAlive()) {
+                String base = "assets/sprites/" + c.getName().toLowerCase() + "/";
+                SpriteAnimator.clearCacheFor(base, "attack", false);
+                SpriteAnimator.clearCacheFor(base, "skill1", false);
+                SpriteAnimator.clearCacheFor(base, "skill2", false);
+                SpriteAnimator.clearCacheFor(base, "skill3", false);
+            }
+        }
+        
+        // Clear attack animations for all enemies
+        for (Character e : enemies) {
+            if (e.isAlive()) {
+                String base = "assets/sprites/" + e.getName().toLowerCase() + "/";
+                SpriteAnimator.clearCacheFor(base, "attack", false);
+            }
+        }
+        
+        // OPTIMIZATION: Hint garbage collector to run
         System.gc();
     }
     
     /**
      * Complete cleanup when transitioning between waves.
      * Stops all animators, clears all caches, and prepares for new wave.
+     * 
+     * OPTIMIZATION: Comprehensive cleanup prevents memory accumulation
      */
     private void cleanupForNewWave() {
         // Stop and remove all enemy animators
@@ -1504,8 +1681,16 @@ animators.put("party_card_" + i, anim);
             battleLog.setText("");
         }
         
-        // Force garbage collection hint
+        // Clear card references
+        charCards.clear();
+        enemyCards.clear();
+        enemySlots.clear();
+        
+        // OPTIMIZATION: Aggressive GC hint + brief pause for cleanup
         System.gc();
+        try {
+            Thread.sleep(50); // Give GC time to work
+        } catch (InterruptedException ignored) {}
     }
     
     /**

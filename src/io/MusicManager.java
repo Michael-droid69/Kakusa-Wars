@@ -7,6 +7,7 @@ import java.io.IOException;
 public class MusicManager {
     private static Clip clip;
     private static String currentTrack = "";
+    private static Clip sfxClip; // Separate clip for sound effects
 
     /**
      * Play a music file with optional looping
@@ -105,5 +106,58 @@ public class MusicManager {
      */
     public static boolean isPlaying() {
         return clip != null && clip.isRunning();
+    }
+    
+    /**
+     * Play a sound effect (non-looping, doesn't interfere with background music)
+     */
+    public static void playSoundEffect(String fileName) {
+        // Run on a background thread
+        Thread t = new Thread(() -> {
+            try {
+                File file = new File("assets/audio/" + fileName);
+                if (!file.exists()) {
+                    System.err.println("Sound effect file not found: " + fileName);
+                    return;
+                }
+
+                AudioInputStream rawStream = AudioSystem.getAudioInputStream(file);
+
+                // Convert to a format Java's Clip can always handle
+                AudioFormat baseFormat   = rawStream.getFormat();
+                AudioFormat targetFormat = new AudioFormat(
+                    AudioFormat.Encoding.PCM_SIGNED,
+                    baseFormat.getSampleRate() > 0 ? baseFormat.getSampleRate() : 44100f,
+                    16,
+                    baseFormat.getChannels() > 0 ? baseFormat.getChannels() : 2,
+                    baseFormat.getChannels() > 0 ? baseFormat.getChannels() * 2 : 4,
+                    baseFormat.getSampleRate() > 0 ? baseFormat.getSampleRate() : 44100f,
+                    false
+                );
+
+                AudioInputStream stream = AudioSystem.getAudioInputStream(targetFormat, rawStream);
+
+                // Close previous sound effect if still playing
+                if (sfxClip != null) {
+                    sfxClip.close();
+                }
+
+                sfxClip = AudioSystem.getClip();
+                sfxClip.open(stream);
+                sfxClip.start();
+
+                // Auto-close when finished
+                sfxClip.addLineListener(event -> {
+                    if (event.getType() == LineEvent.Type.STOP) {
+                        sfxClip.close();
+                    }
+                });
+
+            } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+                System.err.println("Sound Effect Error: " + fileName + " — " + e.getMessage());
+            }
+        });
+        t.setDaemon(true);
+        t.start();
     }
 }

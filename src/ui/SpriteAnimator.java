@@ -15,26 +15,26 @@ import java.util.List;
 
 import javax.imageio.ImageIO;
 
-/**
- * SpriteAnimator — plays frame-by-frame PNG animations from a folder.
- *
- * Design rules:
- *  • ONE timer only. It drives every frame tick. No secondary timers.
- *  • playOnce() counts frames internally — no separate one-shot Timer.
- *  • stop() halts the timer AND clears currentFrames to free memory.
- *  • Every one-shot animation (attack, skill, death) clears its cache
- *    entry the moment it finishes — frames are never kept after use.
- *  • clearAllCache() wipes everything between waves.
- */
+
 public class SpriteAnimator extends JLabel {
 
     private final String  baseFolder;
     private final int     frameDelayMs;
-    private final int     iconSizePx;
+    private int           iconSizePx;  // Not final - can be adjusted for Kapre
     private final boolean flipX;
 
     // The single timer that drives all frame ticks
     private Timer timer;
+    
+    // ═══════════════════════════════════════════════════════════
+    // FRAME SKIPPING OPTIMIZATION
+    // ═══════════════════════════════════════════════════════════
+    // Load every Nth frame to reduce memory usage
+    // 1 = load all frames (no skip)
+    // 2 = load every 2nd frame (50% reduction)
+    // 3 = load every 3rd frame (66% reduction)
+    // 4 = load every 4th frame (75% reduction) - CHUNKY PIXEL ART
+    private static final int FRAME_SKIP = 3;  // ← Increased for chunkier feel + better performance
 
     // Current animation state
     private List<ImageIcon> currentFrames = new ArrayList<>();
@@ -51,6 +51,23 @@ public class SpriteAnimator extends JLabel {
     private static final java.util.Map<String, List<ImageIcon>> CACHE
         = new java.util.HashMap<>();
     private static final String SEP = "_";
+    
+    // Performance optimization: Reuse rendering hints
+    private static final java.awt.RenderingHints FAST_HINTS = new java.awt.RenderingHints(
+        java.awt.RenderingHints.KEY_RENDERING,
+        java.awt.RenderingHints.VALUE_RENDER_SPEED
+    );
+    
+    static {
+        FAST_HINTS.put(java.awt.RenderingHints.KEY_ANTIALIASING, 
+                      java.awt.RenderingHints.VALUE_ANTIALIAS_OFF);
+        FAST_HINTS.put(java.awt.RenderingHints.KEY_INTERPOLATION, 
+                      java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        FAST_HINTS.put(java.awt.RenderingHints.KEY_ALPHA_INTERPOLATION, 
+                      java.awt.RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
+        FAST_HINTS.put(java.awt.RenderingHints.KEY_COLOR_RENDERING, 
+                      java.awt.RenderingHints.VALUE_COLOR_RENDER_SPEED);
+    }
 
     // ─────────────────────────────────────────────────
     // CONSTRUCTORS
@@ -100,10 +117,38 @@ public class SpriteAnimator extends JLabel {
      * The animation's cache entry is cleared when it finishes.
      */
     public void playOnce(String animName, Runnable onComplete) {
+        playOnce(animName, onComplete, false);
+    }
+    
+    /**
+     * Play an animation exactly once with optional size scaling.
+     * scaleUp = true makes the sprite 50% bigger (for skills)
+     */
+    public void playOnce(String animName, Runnable onComplete, boolean scaleUp) {
         if (stopped) { onComplete.run(); return; }
 
+        // Store original size
+        Dimension originalSize = getPreferredSize();
+        
+        // Scale up for skills
+        if (scaleUp) {
+            int newSize = (int)(iconSizePx * 1.5);
+            setPreferredSize(new Dimension(newSize, newSize));
+            setMinimumSize(new Dimension(newSize, newSize));
+            setMaximumSize(new Dimension(newSize, newSize));
+        }
+
         List<ImageIcon> frames = loadFrames(animName);
-        if (frames.isEmpty()) { onComplete.run(); return; }
+        if (frames.isEmpty()) { 
+            // Restore size if scaled
+            if (scaleUp) {
+                setPreferredSize(originalSize);
+                setMinimumSize(originalSize);
+                setMaximumSize(originalSize);
+            }
+            onComplete.run(); 
+            return; 
+        }
 
         // Cancel any previous one-shot
         onceCallback = null;
@@ -117,6 +162,13 @@ public class SpriteAnimator extends JLabel {
         onceTotal    = frames.size();
         onceTicked   = 0;
         onceCallback = () -> {
+            // Restore original size if it was scaled
+            if (scaleUp) {
+                setPreferredSize(originalSize);
+                setMinimumSize(originalSize);
+                setMaximumSize(originalSize);
+            }
+            
             // Clear this animation from cache — it's done, free the memory
             clearCacheFor(baseFolder, animName, flipX);
             // Drop the frames reference so GC can collect them immediately
@@ -213,6 +265,30 @@ public class SpriteAnimator extends JLabel {
         repaint();
     }
 
+    /**
+     * Called when a character is revived.
+     * 1. Restarts the animator
+     * 2. Loads idle animation
+     * 3. Starts the timer again
+     */
+    public void revive() {
+        // Reset stopped flag
+        stopped = false;
+        
+        // Clear the dead icon
+        setIcon(null);
+        
+        // Reload idle animation
+        loadAndSet("idle");
+        
+        // Restart the timer if it was stopped
+        if (timer == null) {
+            startTimer();
+        }
+        
+        repaint();
+    }
+
     // ─────────────────────────────────────────────────
     // STATIC CACHE MANAGEMENT
     // ─────────────────────────────────────────────────
@@ -292,6 +368,31 @@ public class SpriteAnimator extends JLabel {
         }
 
         List<ImageIcon> frames = new ArrayList<>();
+        
+        // ═══════════════════════════════════════════════════════════
+        // TRY SPRITESHEET FIRST (character_animation.png format)
+        // ═══════════════════════════════════════════════════════════
+        String characterName = extractCharacterName(baseFolder);
+        
+        // Special case: horse and witch use attack spritesheets
+        String sheetName = characterName + "_" + animName + ".png";
+        File spritesheetFile = new File(baseFolder + sheetName);
+        
+        if (spritesheetFile.exists()) {
+            // Load spritesheet and extract frames
+            frames = loadFromSpritesheet(spritesheetFile);
+            if (!frames.isEmpty()) {
+                // Cache idle animations
+                if (animName.equals("idle")) {
+                    CACHE.put(key, frames);
+                }
+                return frames;
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // FALLBACK: Try individual frame files (old system)
+        // ═══════════════════════════════════════════════════════════
         File folder = new File(baseFolder + animName + "/");
         if (!folder.exists() || !folder.isDirectory()) return frames;
 
@@ -299,7 +400,11 @@ public class SpriteAnimator extends JLabel {
         if (files == null || files.length == 0) return frames;
         Arrays.sort(files);
 
-        for (File f : files) {
+        // ═══════════════════════════════════════════════════════════
+        // FRAME SKIPPING: Load every Nth frame to reduce memory
+        // ═══════════════════════════════════════════════════════════
+        for (int i = 0; i < files.length; i += FRAME_SKIP) {
+            File f = files[i];
             try {
                 BufferedImage img = ImageIO.read(f);
                 if (img == null) continue;
@@ -316,18 +421,29 @@ public class SpriteAnimator extends JLabel {
                 scaledW = Math.max(scaledW, 10);
                 scaledH = Math.max(scaledH, 10);
 
-                Image scaled = img.getScaledInstance(scaledW, scaledH, Image.SCALE_SMOOTH);
+                // OPTIMIZATION: Use SCALE_FAST for real-time performance
+                // SCALE_SMOOTH is too slow for animations - SCALE_FAST is 3-5x faster
+                Image scaled = img.getScaledInstance(scaledW, scaledH, Image.SCALE_FAST);
 
                 if (flipX) {
+                    // OPTIMIZATION: Use TYPE_INT_ARGB_PRE for faster alpha blending
                     BufferedImage flipped = new BufferedImage(scaledW, scaledH,
-                        BufferedImage.TYPE_INT_ARGB);
+                        BufferedImage.TYPE_INT_ARGB_PRE);
                     java.awt.Graphics2D g2 = flipped.createGraphics();
+                    
+                    // Apply fast rendering hints
+                    g2.setRenderingHints(FAST_HINTS);
+                    
                     g2.drawImage(scaled, 0, 0, scaledW, scaledH, scaledW, 0, 0, scaledH, null);
                     g2.dispose();
                     frames.add(new ImageIcon(flipped));
                 } else {
                     frames.add(new ImageIcon(scaled));
                 }
+                
+                // OPTIMIZATION: Flush original image to free native memory immediately
+                img.flush();
+                
             } catch (IOException e) {
                 System.out.println("Frame load error: " + f.getName());
             }
@@ -337,6 +453,88 @@ public class SpriteAnimator extends JLabel {
         if (animName.equals("idle")) {
             CACHE.put(key, frames);
         }
+        return frames;
+    }
+    
+    /**
+     * Extract character name from baseFolder path.
+     * E.g., "assets/sprites/arthur/" → "arthur"
+     */
+    private String extractCharacterName(String path) {
+        String cleaned = path.replace("\\", "/");
+        if (cleaned.endsWith("/")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        int lastSlash = cleaned.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            return cleaned.substring(lastSlash + 1);
+        }
+        return cleaned;
+    }
+    
+    /**
+     * Load frames from a spritesheet (6×6 grid format).
+     * Assumes 36 frames arranged in 6 columns × 6 rows.
+     */
+    private List<ImageIcon> loadFromSpritesheet(File spritesheetFile) {
+        List<ImageIcon> frames = new ArrayList<>();
+        
+        try {
+            BufferedImage sheet = ImageIO.read(spritesheetFile);
+            if (sheet == null) return frames;
+            
+            // Calculate frame dimensions (assuming 6×6 grid)
+            int cols = 6;
+            int rows = 6;
+            int frameWidth = sheet.getWidth() / cols;
+            int frameHeight = sheet.getHeight() / rows;
+            
+            // Extract frames with FRAME_SKIP
+            int totalFrames = cols * rows;
+            for (int i = 0; i < totalFrames; i += FRAME_SKIP) {
+                int row = i / cols;
+                int col = i % cols;
+                
+                int x = col * frameWidth;
+                int y = row * frameHeight;
+                
+                BufferedImage frameImg = sheet.getSubimage(x, y, frameWidth, frameHeight);
+                
+                // Scale to iconSizePx
+                int origW = frameImg.getWidth(), origH = frameImg.getHeight();
+                int scaledW, scaledH;
+                if (origW >= origH) {
+                    scaledW = iconSizePx;
+                    scaledH = (int)((double) origH / origW * iconSizePx);
+                } else {
+                    scaledH = iconSizePx;
+                    scaledW = (int)((double) origW / origH * iconSizePx);
+                }
+                scaledW = Math.max(scaledW, 10);
+                scaledH = Math.max(scaledH, 10);
+                
+                Image scaled = frameImg.getScaledInstance(scaledW, scaledH, Image.SCALE_FAST);
+                
+                if (flipX) {
+                    BufferedImage flipped = new BufferedImage(scaledW, scaledH,
+                        BufferedImage.TYPE_INT_ARGB_PRE);
+                    java.awt.Graphics2D g2 = flipped.createGraphics();
+                    g2.setRenderingHints(FAST_HINTS);
+                    g2.drawImage(scaled, 0, 0, scaledW, scaledH, scaledW, 0, 0, scaledH, null);
+                    g2.dispose();
+                    frames.add(new ImageIcon(flipped));
+                } else {
+                    frames.add(new ImageIcon(scaled));
+                }
+            }
+            
+            // Flush sheet to free memory
+            sheet.flush();
+            
+        } catch (IOException e) {
+            System.out.println("Spritesheet load error: " + spritesheetFile.getName());
+        }
+        
         return frames;
     }
 }

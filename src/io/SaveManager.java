@@ -41,11 +41,12 @@ public static void clearSaveData() {
 /**
  * Appends or updates a player entry in players.txt.
  * Call this when:
- *   (a) a brand-new username is confirmed — pass wave=1, kills=0, turns=0
+ *   (a) a brand-new username is confirmed — pass wave=0, kills=0, turns=0
  *   (b) a session ends (win or lose) — pass their final stats
  *
  * If the username already exists, the line is updated (higher wave wins).
  * If it's new, a line is appended.
+ * Automatically cleans up malformed/incomplete entries.
  */
 public static void registerOrUpdatePlayer(String username, int highestWave,
                                            int totalKills, int totalTurns,
@@ -58,20 +59,35 @@ public static void registerOrUpdatePlayer(String username, int highestWave,
         try (java.util.Scanner sc = new java.util.Scanner(f)) {
             while (sc.hasNextLine()) {
                 String line = sc.nextLine().trim();
+                
+                // Skip empty lines and comments
                 if (line.isEmpty() || line.startsWith("#")) {
-                    lines.add(line); continue;
+                    continue; // Don't keep empty lines
                 }
+                
                 String[] parts = line.split(",");
-                if (parts.length >= 1 && parts[0].equalsIgnoreCase(username)) {
+                
+                // Skip malformed lines (must have at least username and wave)
+                if (parts.length < 2) {
+                    continue; // Skip incomplete entries
+                }
+                
+                if (parts[0].equalsIgnoreCase(username)) {
                     // Update: keep the HIGHER wave
-                    int existingWave = parts.length >= 2
-                        ? Integer.parseInt(parts[1].trim()) : 0;
+                    int existingWave = 0;
+                    try {
+                        existingWave = Integer.parseInt(parts[1].trim());
+                    } catch (NumberFormatException ignored) {}
+                    
                     int bestWave = Math.max(existingWave, highestWave);
                     lines.add(username + "," + bestWave + "," + totalKills
                               + "," + totalTurns + "," + lastArea);
                     found = true;
                 } else {
-                    lines.add(line);
+                    // Keep other valid entries
+                    if (parts.length >= 5) {
+                        lines.add(line);
+                    }
                 }
             }
         }
@@ -120,17 +136,16 @@ public static java.util.List<String[]> loadLeaderboard() {
     // ─────────────────────────────────────────────────
     // USERNAME LOG
     // Called once on the UsernameScreen when player hits Start.
-    // Appends the name to players.txt — never overwrites old entries.
+    // Registers the player in players.txt with initial stats.
+    // Uses registerOrUpdatePlayer to avoid duplicates.
     // ─────────────────────────────────────────────────
     public static void logUsername(String username) throws IOException {
         // Create saves/ directory if it doesn't exist yet
         Files.createDirectories(Path.of("saves"));
-        // true = append mode
-        try (FileWriter fw = new FileWriter(PLAYER_LOG, true);
-             BufferedWriter bw = new BufferedWriter(fw)) {
-            bw.write(username);
-            bw.newLine();
-        }
+        
+        // Use registerOrUpdatePlayer to avoid duplicates
+        // Initial stats: wave 0, kills 0, turns 0, no area yet
+        registerOrUpdatePlayer(username, 0, 0, 0, "None");
     }
 
     // ─────────────────────────────────────────────────
