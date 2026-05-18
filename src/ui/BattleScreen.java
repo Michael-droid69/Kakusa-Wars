@@ -48,10 +48,11 @@ public class BattleScreen extends JPanel {
 
 
     // ── State ──
-    private int     activeCharIndex = 0;   // which party member is acting
-    private boolean playerTurn      = true;
-    private int     selectedTarget  = 0;   // which enemy is targeted
+    private int     activeCharIndex      = 0;   // which party member is acting
+    private boolean playerTurn           = true;
+    private int     selectedTarget       = 0;   // which enemy is targeted
     private int     enemiesKilledThisWave = 0;
+    private int     partyActedThisRound  = 0;   // tracks how many party members have acted this round
 
     // ── UI Regions ──
     private JPanel     enemyZone;     // top: enemy sprites + health bars
@@ -98,6 +99,9 @@ public class BattleScreen extends JPanel {
         add(buildBottomBar(),       BorderLayout.SOUTH);   // party cards + enemy cards
 
         log("Wave " + frame.getCurrentWave() + " begins in " + frame.getCurrentArea() + "!");
+        // Start from character 0 — reset round state
+        partyActedThisRound = 0;
+        activeCharIndex     = 0;
         log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
 
         // Show first enemy detail on load
@@ -1158,13 +1162,32 @@ animators.put("party_card_" + i, anim);
 
     // ─────────────────────────────────────────────────
     // TURN MANAGEMENT
+    //
+    // Round flow:
+    //   ALL living party members act first (one by one, player controlled)
+    //   THEN all enemies act together
+    //   THEN mana regen, taunt clear, next round starts
     // ─────────────────────────────────────────────────
     private void endPlayerTurn() {
         playerTurn = false;
-        // Delay before enemy acts — feels more like a real game
-        Timer delay = new Timer(600, e -> doEnemyTurns());
-        delay.setRepeats(false);
-        delay.start();
+        partyActedThisRound++;
+
+        // Count how many party members are still alive and can act
+        long aliveCount = party.stream().filter(Character::isAlive).count();
+
+        if (partyActedThisRound < aliveCount) {
+            // More party members still need to act — advance to next character
+            advanceActiveCharacter();
+            playerTurn = true;
+            rebuildActionPanel();
+            log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
+        } else {
+            // All party members have acted — now enemies go
+            log("— Enemy phase —");
+            Timer delay = new Timer(400, e -> doEnemyTurns());
+            delay.setRepeats(false);
+            delay.start();
+        }
     }
 
     private void doEnemyTurns() {
@@ -1188,11 +1211,18 @@ animators.put("party_card_" + i, anim);
                 frame.goToGameOver(false);
                 return;
             }
+
+            // End of full round — mana regen + clear taunt
             BattleEngine.endOfTurn(party);
             updateAllBars();
+
+            // Reset round counter and go back to the FIRST living character
+            partyActedThisRound = 0;
+            activeCharIndex = -1;          // will be advanced to 0 (or first alive)
             advanceActiveCharacter();
             playerTurn = true;
             rebuildActionPanel();
+            log("━━ New Round ━━");
             log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
         });
     }
@@ -1210,7 +1240,8 @@ animators.put("party_card_" + i, anim);
     }
 
     private void advanceActiveCharacter() {
-        // Skip dead characters
+        // Skip dead characters. When called after reset (activeCharIndex = -1),
+        // this naturally lands on index 0 (the first character) on the first increment.
         int attempts = 0;
         do {
             activeCharIndex = (activeCharIndex + 1) % party.size();
