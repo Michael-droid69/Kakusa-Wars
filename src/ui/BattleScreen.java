@@ -957,6 +957,21 @@ animators.put("party_card_" + i, anim);
     }
 
     // ─────────────────────────────────────────────────
+    // COMBAT POPUP — shows a JOptionPane after animation,
+    // logs the message when player clicks OK, then runs next step.
+    // ─────────────────────────────────────────────────
+    private void showCombatPopup(String message, Runnable afterOk) {
+        JOptionPane.showMessageDialog(
+            frame,
+            message,
+            "⚔ Battle",
+            JOptionPane.PLAIN_MESSAGE
+        );
+        log(message);
+        afterOk.run();
+    }
+
+    // ─────────────────────────────────────────────────
     // ACTIONS
     // ─────────────────────────────────────────────────
     private void doAttack() {
@@ -965,40 +980,44 @@ animators.put("party_card_" + i, anim);
     Character target = enemies.get(selectedTarget);
     if (!target.isAlive()) { log("That enemy is dead. Pick another."); return; }
 
-    // Get the enemy's slot so we know where to approach
     JPanel targetSlot = getEnemySlot(selectedTarget);
 
+    // onDamage runs AFTER the animation finishes
     Runnable onDamage = () -> {
         BattleEngine.AttackResult result = BattleEngine.playerAttack(actor, target);
-        log(result.message);
-        updateAllBars();
-        if (!target.isAlive()) {
-            log(target.getName() + " was defeated!");
-            frame.addEnemyKill();
 
-            // Award gold loot
-            int gold = BattleEngine.rollGoldDrop(target, frame.getCurrentWave());
+        // Build the full message (may include gold loot)
+        StringBuilder msg = new StringBuilder(result.message);
+        boolean enemyDied = !target.isAlive();
+        int gold = 0;
+        if (enemyDied) {
+            gold = BattleEngine.rollGoldDrop(target, frame.getCurrentWave());
             frame.addGold(gold);
-            log("💰 Looted " + gold + " gold from " + target.getName() + "!");
-
-            SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
-            if (deathAnim != null) {
-                // stop idle loop so we don't keep ticking a "dead" enemy sprite
-                deathAnim.stop();
-                deathAnim.playOnce("death", () -> {});
-                // remove animator so it can't keep scheduling/ticking via any remaining references
-                animators.remove("enemy_" + selectedTarget);
-            }
+            frame.addEnemyKill();
+            msg.append("\n").append(target.getName()).append(" was defeated!");
+            msg.append("\n💰 Looted ").append(gold).append(" gold!");
         }
-        frame.addTurn();
-        checkWaveOver();
-        if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+
+        // Show popup AFTER animation — player clicks OK to continue
+        showCombatPopup(msg.toString(), () -> {
+            updateAllBars();
+            if (enemyDied) {
+                SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
+                if (deathAnim != null) {
+                    deathAnim.stop();
+                    deathAnim.playOnce("death", () -> {});
+                    animators.remove("enemy_" + selectedTarget);
+                }
+            }
+            frame.addTurn();
+            checkWaveOver();
+            if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+        });
     };
 
     if (targetSlot != null) {
         approachAndAttack("party_" + activeCharIndex, targetSlot, "attack", onDamage);
     } else {
-        // No slot reference — fall back to play-in-place
         SpriteAnimator anim = animators.get("party_" + activeCharIndex);
         if (anim != null) anim.playOnce("attack", onDamage);
         else onDamage.run();
@@ -1023,34 +1042,40 @@ animators.put("party_card_" + i, anim);
     };
 
     Runnable onDamage = () -> {
+        StringBuilder msg = new StringBuilder();
+
         if (skill.getType().equals("damage_all")) {
-            BattleEngine.playerSkillAoe(actor, skillIndex, enemies)
-                .forEach(r -> log(r.message));
-            // Check each enemy for death after AoE
+            List<BattleEngine.AttackResult> results =
+                BattleEngine.playerSkillAoe(actor, skillIndex, enemies);
+            results.forEach(r -> msg.append(r.message).append("\n"));
             for (int i = 0; i < enemies.size(); i++) {
                 Character e = enemies.get(i);
                 if (!e.isAlive()) {
-                    log(e.getName() + " was defeated!");
-                    frame.addEnemyKill();
                     int gold = BattleEngine.rollGoldDrop(e, frame.getCurrentWave());
                     frame.addGold(gold);
-                    log("💰 Looted " + gold + " gold from " + e.getName() + "!");
+                    frame.addEnemyKill();
+                    msg.append(e.getName()).append(" was defeated!\n");
+                    msg.append("💰 Looted ").append(gold).append(" gold!\n");
                 }
             }
         } else {
             BattleEngine.AttackResult r = BattleEngine.playerSkill(actor, skillIndex, target);
-            log(r.message);
+            msg.append(r.message);
             if (!target.isAlive()) {
-                log(target.getName() + " was defeated!");
-                frame.addEnemyKill();
                 int gold = BattleEngine.rollGoldDrop(target, frame.getCurrentWave());
                 frame.addGold(gold);
-                log("💰 Looted " + gold + " gold from " + target.getName() + "!");
+                frame.addEnemyKill();
+                msg.append("\n").append(target.getName()).append(" was defeated!");
+                msg.append("\n💰 Looted ").append(gold).append(" gold!");
             }
         }
-        updateAllBars();
-        checkWaveOver();
-        if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+
+        // Show popup AFTER animation — player clicks OK to continue
+        showCombatPopup(msg.toString().trim(), () -> {
+            updateAllBars();
+            checkWaveOver();
+            if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
+        });
     };
 
     // skill2 (index 1) is often ranged (Multi Slash flies out) — skip approach for AOE
@@ -1143,37 +1168,45 @@ animators.put("party_card_" + i, anim);
     }
 
     private void doEnemyTurns() {
+        // Collect all enemy action messages first
+        List<String> messages = new ArrayList<>();
         for (Character enemy : enemies) {
             if (!enemy.isAlive()) continue;
             String result = BattleEngine.enemyTurn(enemy, party, frame.getCurrentWave());
-
-            // Handle taunt prefix
             if (result.startsWith("TAUNT:")) {
-                // Format: TAUNT:targetName:logMessage
                 String[] parts = result.split(":", 3);
-                String msg = parts.length == 3 ? parts[2] : result;
-                log(msg);
-            } else {
-                log(result);
+                messages.add(parts.length == 3 ? parts[2] : result);
+            } else if (!result.isEmpty()) {
+                messages.add(result);
             }
         }
 
-        updateAllBars();
+        // Show each enemy action as a popup one at a time, then update state
+        showEnemyPopupChain(messages, 0, () -> {
+            updateAllBars();
+            if (BattleEngine.isPartyDefeated(party)) {
+                frame.goToGameOver(false);
+                return;
+            }
+            BattleEngine.endOfTurn(party);
+            updateAllBars();
+            advanceActiveCharacter();
+            playerTurn = true;
+            rebuildActionPanel();
+            log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
+        });
+    }
 
-        if (BattleEngine.isPartyDefeated(party)) {
-            frame.goToGameOver(false);
+    // Recursively shows one popup per enemy message, then calls onDone
+    private void showEnemyPopupChain(List<String> messages, int index, Runnable onDone) {
+        if (index >= messages.size()) {
+            onDone.run();
             return;
         }
-
-        // End of full round — mana regen
-        BattleEngine.endOfTurn(party);
-        updateAllBars();
-
-        // Next player character's turn
-        advanceActiveCharacter();
-        playerTurn = true;
-        rebuildActionPanel();
-        log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
+        String msg = messages.get(index);
+        JOptionPane.showMessageDialog(frame, msg, "👹 Enemy Turn", JOptionPane.PLAIN_MESSAGE);
+        log(msg);
+        showEnemyPopupChain(messages, index + 1, onDone);
     }
 
     private void advanceActiveCharacter() {
