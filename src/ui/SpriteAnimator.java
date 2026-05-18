@@ -119,8 +119,11 @@ public class SpriteAnimator extends JLabel {
         onceCallback = () -> {
             // Clear this animation from cache — it's done, free the memory
             clearCacheFor(baseFolder, animName, flipX);
-            // Drop the frames reference so GC can collect them
+            // Drop the frames reference so GC can collect them immediately
             currentFrames = new ArrayList<>();
+            currentAnim = "";
+            // Suggest garbage collection after animation completes
+            System.gc();
             onComplete.run();
         };
     }
@@ -136,12 +139,23 @@ public class SpriteAnimator extends JLabel {
             timer.stop();
             timer = null;
         }
-        // Drop frame references so GC can collect the ImageIcons
-        currentFrames = new ArrayList<>();
+        // Drop frame references so GC can collect the ImageIcons immediately
+        currentFrames.clear();
+        currentFrames = null;
         onceCallback  = null;
+        currentAnim   = "";
+        
         // Clear this character's entire cache entry
         clearCacheFor(baseFolder, currentAnim, flipX);
         clearCacheFor(baseFolder, "idle",      flipX);
+        clearCacheFor(baseFolder, "attack",    flipX);
+        clearCacheFor(baseFolder, "skill1",    flipX);
+        clearCacheFor(baseFolder, "skill2",    flipX);
+        clearCacheFor(baseFolder, "skill3",    flipX);
+        clearCacheFor(baseFolder, "death",     flipX);
+        
+        // Clear the icon to free the image
+        setIcon(null);
     }
 
     // ── Single shared tombstone image — loaded once, used by everyone ──
@@ -176,7 +190,12 @@ public class SpriteAnimator extends JLabel {
             timer = null;
         }
         onceCallback  = null;
-        currentFrames = new ArrayList<>();
+        
+        // Clear current frames immediately
+        if (currentFrames != null) {
+            currentFrames.clear();
+            currentFrames = null;
+        }
 
         // Wipe every cache entry that belongs to this character/enemy
         List<String> toRemove = new ArrayList<>();
@@ -188,6 +207,9 @@ public class SpriteAnimator extends JLabel {
         // Show the shared tombstone image
         ImageIcon deadIcon = getDeadIcon(iconSizePx);
         setIcon(deadIcon);   // null is fine too — slot just goes blank
+        
+        // Suggest garbage collection after death
+        System.gc();
         repaint();
     }
 
@@ -203,6 +225,11 @@ public class SpriteAnimator extends JLabel {
     /** Wipe the entire cache — call between waves. */
     public static void clearAllCache() {
         CACHE.clear();
+        // Also clear the dead icon to free memory
+        DEAD_ICON = null;
+        DEAD_ICON_LOADED = false;
+        // Suggest garbage collection after clearing all cache
+        System.gc();
     }
 
     // ─────────────────────────────────────────────────
@@ -219,7 +246,7 @@ public class SpriteAnimator extends JLabel {
      * Handles both looping and one-shot animations.
      */
     private void tick() {
-        if (stopped || currentFrames.isEmpty()) return;
+        if (stopped || currentFrames == null || currentFrames.isEmpty()) return;
 
         if (onceCallback != null) {
             // One-shot mode: advance frame, check if done
@@ -258,7 +285,11 @@ public class SpriteAnimator extends JLabel {
     /** Load frames from disk (or cache). Returns empty list if folder missing. */
     private List<ImageIcon> loadFrames(String animName) {
         String key = baseFolder + animName + SEP + flipX;
-        if (CACHE.containsKey(key)) return CACHE.get(key);
+        
+        // Only use cache for idle animations - all others load fresh and clear after use
+        if (animName.equals("idle") && CACHE.containsKey(key)) {
+            return CACHE.get(key);
+        }
 
         List<ImageIcon> frames = new ArrayList<>();
         File folder = new File(baseFolder + animName + "/");
@@ -302,7 +333,7 @@ public class SpriteAnimator extends JLabel {
             }
         }
 
-        // Only cache looping animations (idle) — one-shots are cleared after use
+        // Only cache idle animations - attack/skill animations are cleared after use
         if (animName.equals("idle")) {
             CACHE.put(key, frames);
         }

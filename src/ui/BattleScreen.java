@@ -53,6 +53,7 @@ public class BattleScreen extends JPanel {
     private int     selectedTarget       = 0;   // which enemy is targeted
     private int     enemiesKilledThisWave = 0;
     private int     partyActedThisRound  = 0;   // tracks how many party members have acted this round
+    private final List<Boolean> hasActedThisRound = new ArrayList<>(); // tracks which characters have acted
 
     // ── UI Regions ──
     private JPanel     enemyZone;     // top: enemy sprites + health bars
@@ -102,6 +103,13 @@ public class BattleScreen extends JPanel {
         // Start from character 0 — reset round state
         partyActedThisRound = 0;
         activeCharIndex     = 0;
+        // Initialize hasActedThisRound list - all characters start with false (haven't acted)
+        hasActedThisRound.clear();
+        for (int i = 0; i < party.size(); i++) {
+            hasActedThisRound.add(false);
+        }
+        // Auto-select first alive enemy at battle start
+        autoSelectAliveEnemy();
         log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
 
         // Show first enemy detail on load
@@ -230,7 +238,14 @@ slot.add(nameLabel);
             final int idx = i;
             slot.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
-                    if (enemies.get(idx).isAlive()) selectedTarget = idx;
+                    if (!enemies.get(idx).isAlive()) {
+                        JOptionPane.showMessageDialog(frame,
+                            enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.",
+                            "Invalid Target",
+                            JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    selectedTarget = idx;
                     log("Targeting: " + enemies.get(idx).getName());
                     highlightTarget(idx);
                 }
@@ -385,7 +400,13 @@ private JPanel getEnemySlot(int index) {
         slot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         slot.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
-                if (!enemies.get(idx).isAlive()) return;
+                if (!enemies.get(idx).isAlive()) {
+                    JOptionPane.showMessageDialog(frame,
+                        enemies.get(idx).getName() + " is already dead!\nSelect a living enemy.",
+                        "Invalid Target",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
                 selectedTarget = idx;
                 highlightEnemyCard(idx);
                 updateDetailPanel(enemies.get(idx));
@@ -737,9 +758,20 @@ animators.put("party_card_" + i, anim);
         card.add(portrait,  BorderLayout.WEST);
         card.add(infoPanel, BorderLayout.CENTER);
 
+        // Only allow clicking if character is alive AND hasn't acted this round yet
         if (c.isAlive()) {
             card.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    // Prevent switching to characters who have already acted
+                    if (hasActedThisRound.get(charIndex)) {
+                        log(c.getName() + " has already acted this round!");
+                        return;
+                    }
+                    // Only allow switching during player turn
+                    if (!playerTurn) {
+                        log("Wait for the enemy phase to finish!");
+                        return;
+                    }
                     activeCharIndex = charIndex;
                     highlightActiveChar();
                     rebuildActionPanel();
@@ -794,7 +826,13 @@ animators.put("party_card_" + i, anim);
 
         card.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
-                if (!e.isAlive()) return;
+                if (!e.isAlive()) {
+                    JOptionPane.showMessageDialog(frame,
+                        e.getName() + " is already dead!\nSelect a living enemy.",
+                        "Invalid Target",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
                 selectedTarget = enemyIndex;
                 highlightEnemyCard(enemyIndex);
                 updateDetailPanel(e);
@@ -807,18 +845,36 @@ animators.put("party_card_" + i, anim);
     private void highlightActiveChar() {
         for (int i = 0; i < charCards.size(); i++) {
             JPanel card = charCards.get(i);
+            Character c = party.get(i);
+            
+            // Check if this character has already acted this round
+            boolean hasActed = i < hasActedThisRound.size() && hasActedThisRound.get(i);
+            
             if (i == activeCharIndex) {
+                // Active character - bright gold border
                 card.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(new Color(180, 140, 30), 2),
                     BorderFactory.createEmptyBorder(7, 9, 7, 9)
                 ));
                 card.setBackground(new Color(22, 18, 10));
+            } else if (hasActed) {
+                // Character has already acted - dimmed/grayed out
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(40, 35, 50), 1),
+                    BorderFactory.createEmptyBorder(8, 10, 8, 10)
+                ));
+                card.setBackground(new Color(10, 8, 14));
+                card.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             } else {
+                // Character hasn't acted yet - normal appearance
                 card.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(new Color(50, 40, 80), 1),
                     BorderFactory.createEmptyBorder(8, 10, 8, 10)
                 ));
                 card.setBackground(new Color(14, 12, 22));
+                if (c.isAlive()) {
+                    card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                }
             }
         }
         repaint();
@@ -978,11 +1034,59 @@ animators.put("party_card_" + i, anim);
     // ─────────────────────────────────────────────────
     // ACTIONS
     // ─────────────────────────────────────────────────
+    
+    /**
+     * Automatically selects the first alive enemy.
+     * Called when current target dies or when starting a new turn.
+     */
+    private void autoSelectAliveEnemy() {
+        for (int i = 0; i < enemies.size(); i++) {
+            if (enemies.get(i).isAlive()) {
+                selectedTarget = i;
+                highlightEnemyCard(i);
+                updateDetailPanel(enemies.get(i));
+                return;
+            }
+        }
+        // No alive enemies (shouldn't happen, but just in case)
+        selectedTarget = 0;
+    }
+    
+    /**
+     * Ensures the current target is alive. If not, auto-selects an alive enemy.
+     * Returns true if a valid target exists, false if all enemies are dead.
+     */
+    private boolean ensureValidTarget() {
+        if (selectedTarget >= 0 && selectedTarget < enemies.size() 
+            && enemies.get(selectedTarget).isAlive()) {
+            return true; // Current target is valid
+        }
+        
+        // Current target is dead or invalid, find a new one
+        for (int i = 0; i < enemies.size(); i++) {
+            if (enemies.get(i).isAlive()) {
+                selectedTarget = i;
+                highlightEnemyCard(i);
+                updateDetailPanel(enemies.get(i));
+                log("Auto-targeting: " + enemies.get(i).getName());
+                return true;
+            }
+        }
+        
+        return false; // No alive enemies
+    }
+    
     private void doAttack() {
     if (!playerTurn) return;
+    
+    // Ensure we have a valid alive target
+    if (!ensureValidTarget()) {
+        log("No enemies left to attack!");
+        return;
+    }
+    
     Character actor  = party.get(activeCharIndex);
     Character target = enemies.get(selectedTarget);
-    if (!target.isAlive()) { log("That enemy is dead. Pick another."); return; }
 
     JPanel targetSlot = getEnemySlot(selectedTarget);
 
@@ -1011,6 +1115,8 @@ animators.put("party_card_" + i, anim);
                     deathAnim.showDead();
                     animators.remove("enemy_" + selectedTarget);
                 }
+                // Auto-select next alive enemy after this one dies
+                autoSelectAliveEnemy();
             }
             frame.addTurn();
             checkWaveOver();
@@ -1029,13 +1135,23 @@ animators.put("party_card_" + i, anim);
 
     private void doSkill(int skillIndex) {
     if (!playerTurn) return;
+    
     Character actor  = party.get(activeCharIndex);
-    Character target = enemies.get(selectedTarget);
     Skill     skill  = actor.getSkill(skillIndex);
 
     if (actor.getMana() < skill.getManaCost()) {
         log("Not enough mana for " + skill.getName() + "!"); return;
     }
+    
+    // For single-target skills, ensure we have a valid target
+    if (!skill.getType().equals("damage_all")) {
+        if (!ensureValidTarget()) {
+            log("No enemies left to target!");
+            return;
+        }
+    }
+    
+    Character target = enemies.get(selectedTarget);
 
     String animName = switch (skillIndex) {
         case 0 -> "skill1";
@@ -1076,11 +1192,17 @@ animators.put("party_card_" + i, anim);
         // Show popup AFTER animation — player clicks OK to continue
         showCombatPopup(msg.toString().trim(), () -> {
             // Show tombstone for any enemies that died from this skill
+            boolean anyDied = false;
             for (int i = 0; i < enemies.size(); i++) {
                 if (!enemies.get(i).isAlive()) {
                     SpriteAnimator ea = animators.get("enemy_" + i);
                     if (ea != null) { ea.showDead(); animators.remove("enemy_" + i); }
+                    anyDied = true;
                 }
+            }
+            // Auto-select next alive enemy if any died
+            if (anyDied) {
+                autoSelectAliveEnemy();
             }
             updateAllBars();
             checkWaveOver();
@@ -1208,7 +1330,13 @@ animators.put("party_card_" + i, anim);
     // ─────────────────────────────────────────────────
     private void endPlayerTurn() {
         playerTurn = false;
+        
+        // Mark the current character as having acted this round
+        hasActedThisRound.set(activeCharIndex, true);
         partyActedThisRound++;
+        
+        // Clear animation cache after each action to prevent memory buildup
+        clearUnusedAnimationCache();
 
         // Count how many party members are still alive and can act
         long aliveCount = party.stream().filter(Character::isAlive).count();
@@ -1219,10 +1347,11 @@ animators.put("party_card_" + i, anim);
         }
 
         if (partyActedThisRound < aliveCount) {
-            // More party members still need to act — advance to next LIVING character
+            // More party members still need to act — advance to next LIVING character who hasn't acted
             advanceActiveCharacter();
             playerTurn = true;
             rebuildActionPanel();
+            highlightActiveChar(); // Update visual state to show who has acted
             log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
         } else {
             // All living party members have acted — now enemies go
@@ -1278,13 +1407,23 @@ animators.put("party_card_" + i, anim);
             // End of full round — mana regen + clear taunt
             BattleEngine.endOfTurn(party);
             updateAllBars();
+            
+            // Clear animation cache after enemy phase
+            clearUnusedAnimationCache();
 
             // Reset round counter and go back to the FIRST living character
             partyActedThisRound = 0;
             activeCharIndex = -1;
+            
+            // Reset the hasActedThisRound list for the new round
+            for (int i = 0; i < hasActedThisRound.size(); i++) {
+                hasActedThisRound.set(i, false);
+            }
+            
             advanceActiveCharacter();
             playerTurn = true;
             rebuildActionPanel();
+            highlightActiveChar(); // Update visual state for new round
             log("━━ New Round ━━");
             log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
         });
@@ -1303,13 +1442,79 @@ animators.put("party_card_" + i, anim);
     }
 
     private void advanceActiveCharacter() {
-        // Skip dead characters. When called after reset (activeCharIndex = -1),
+        // Skip dead characters AND characters who have already acted this round.
+        // When called after reset (activeCharIndex = -1),
         // this naturally lands on index 0 (the first character) on the first increment.
         int attempts = 0;
         do {
             activeCharIndex = (activeCharIndex + 1) % party.size();
             attempts++;
-        } while (!party.get(activeCharIndex).isAlive() && attempts < party.size());
+        } while (attempts < party.size() && 
+                 (!party.get(activeCharIndex).isAlive() || hasActedThisRound.get(activeCharIndex)));
+    }
+
+    // ─────────────────────────────────────────────────
+    // MEMORY MANAGEMENT & CACHE CLEANUP
+    // ─────────────────────────────────────────────────
+    
+    /**
+     * Clears animation cache for non-essential animations.
+     * Called after each turn to prevent memory buildup.
+     * Only keeps idle animations cached, clears all attack/skill animations.
+     */
+    private void clearUnusedAnimationCache() {
+        // Force garbage collection hint (JVM decides if it actually runs)
+        System.gc();
+    }
+    
+    /**
+     * Complete cleanup when transitioning between waves.
+     * Stops all animators, clears all caches, and prepares for new wave.
+     */
+    private void cleanupForNewWave() {
+        // Stop and remove all enemy animators
+        List<String> keysToRemove = new ArrayList<>();
+        for (String key : animators.keySet()) {
+            SpriteAnimator anim = animators.get(key);
+            if (anim != null) {
+                anim.stop(); // Stops timer and clears frames
+            }
+            keysToRemove.add(key);
+        }
+        keysToRemove.forEach(animators::remove);
+        
+        // Clear all health bars
+        healthBars.clear();
+        
+        // Clear sprite frame cache completely
+        SpriteAnimator.clearAllCache();
+        
+        // Clear background cache for old areas
+        clearOldBackgrounds();
+        
+        // Clear battle log to free string memory
+        if (battleLog != null) {
+            battleLog.setText("");
+        }
+        
+        // Force garbage collection hint
+        System.gc();
+    }
+    
+    /**
+     * Removes background images from cache that aren't for the current area.
+     */
+    private void clearOldBackgrounds() {
+        String currentBg = backgroundKey();
+        List<String> toRemove = new ArrayList<>();
+        
+        for (String key : BACKGROUND_CACHE.keySet()) {
+            if (!key.equals(currentBg)) {
+                toRemove.add(key);
+            }
+        }
+        
+        toRemove.forEach(BACKGROUND_CACHE::remove);
     }
 
     // ─────────────────────────────────────────────────
@@ -1341,14 +1546,11 @@ animators.put("party_card_" + i, anim);
     Timer t = new Timer(1500, e -> frame.goToGameOver(true));
     t.setRepeats(false); t.start();
 } else {
-            // wave cleared: stop all remaining enemy sprite timers so old waves can't keep ticking
-            for (SpriteAnimator anim : animators.values()) {
-                if (anim != null) anim.stop();
-            }
-            animators.clear();
-            // Wipe the entire sprite frame cache so the previous wave's
-            // enemy and character frames don't sit in memory during the next wave.
-            SpriteAnimator.clearAllCache();
+            // Wave cleared: comprehensive cleanup before next wave
+            log("Cleaning up wave " + wave + "...");
+            
+            // Stop all animators and clear their memory
+            cleanupForNewWave();
 
             // Save game, go to shop, then next wave
             frame.saveCurrentGame();

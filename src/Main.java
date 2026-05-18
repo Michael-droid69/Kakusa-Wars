@@ -1,8 +1,4 @@
-/**
- * RPG Battle System
- * Authors: [Your Name] & [Partner Name]
- * OOP Final Project
- */
+
 
 import javax.swing.SwingUtilities;
 
