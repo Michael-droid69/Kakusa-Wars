@@ -144,6 +144,53 @@ public class SpriteAnimator extends JLabel {
         clearCacheFor(baseFolder, "idle",      flipX);
     }
 
+    // ── Single shared tombstone image — loaded once, used by everyone ──
+    private static ImageIcon DEAD_ICON = null;
+    private static boolean   DEAD_ICON_LOADED = false;
+
+    private static ImageIcon getDeadIcon(int sizePx) {
+        if (!DEAD_ICON_LOADED) {
+            DEAD_ICON_LOADED = true;
+            try {
+                BufferedImage img = ImageIO.read(new File("assets/sprites/dead.png"));
+                if (img != null) {
+                    Image scaled = img.getScaledInstance(sizePx, sizePx, Image.SCALE_SMOOTH);
+                    DEAD_ICON = new ImageIcon(scaled);
+                }
+            } catch (IOException ignored) {}
+        }
+        return DEAD_ICON;
+    }
+
+    /**
+     * Called when a character or enemy dies.
+     * 1. Kills the timer — no more ticking, ever.
+     * 2. Wipes ALL cached frames for this character from the static map.
+     * 3. Shows the shared dead.png tombstone as a static image.
+     */
+    public void showDead() {
+        // Stop the timer immediately
+        stopped = true;
+        if (timer != null) {
+            timer.stop();
+            timer = null;
+        }
+        onceCallback  = null;
+        currentFrames = new ArrayList<>();
+
+        // Wipe every cache entry that belongs to this character/enemy
+        List<String> toRemove = new ArrayList<>();
+        for (String key : CACHE.keySet()) {
+            if (key.startsWith(baseFolder)) toRemove.add(key);
+        }
+        toRemove.forEach(CACHE::remove);
+
+        // Show the shared tombstone image
+        ImageIcon deadIcon = getDeadIcon(iconSizePx);
+        setIcon(deadIcon);   // null is fine too — slot just goes blank
+        repaint();
+    }
+
     // ─────────────────────────────────────────────────
     // STATIC CACHE MANAGEMENT
     // ─────────────────────────────────────────────────

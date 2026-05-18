@@ -1006,11 +1006,9 @@ animators.put("party_card_" + i, anim);
         showCombatPopup(msg.toString(), () -> {
             updateAllBars();
             if (enemyDied) {
-                // Stop idle, play death animation, then freeze
                 SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
                 if (deathAnim != null) {
-                    deathAnim.stop();
-                    deathAnim.playOnce("death", () -> stopAnimatorFor("enemy_" + selectedTarget));
+                    deathAnim.showDead();
                     animators.remove("enemy_" + selectedTarget);
                 }
             }
@@ -1077,6 +1075,13 @@ animators.put("party_card_" + i, anim);
 
         // Show popup AFTER animation — player clicks OK to continue
         showCombatPopup(msg.toString().trim(), () -> {
+            // Show tombstone for any enemies that died from this skill
+            for (int i = 0; i < enemies.size(); i++) {
+                if (!enemies.get(i).isAlive()) {
+                    SpriteAnimator ea = animators.get("enemy_" + i);
+                    if (ea != null) { ea.showDead(); animators.remove("enemy_" + i); }
+                }
+            }
             updateAllBars();
             checkWaveOver();
             if (!BattleEngine.isEnemyWaveDefeated(enemies)) endPlayerTurn();
@@ -1228,10 +1233,13 @@ animators.put("party_card_" + i, anim);
         }
     }
 
-    // Stops the sprite animator for a character or enemy key and freezes on last frame
+    // Shows tombstone and clears all cache for a character/enemy key
     private void stopAnimatorFor(String key) {
         SpriteAnimator anim = animators.get(key);
-        if (anim != null) anim.stop();
+        if (anim != null) {
+            anim.showDead();
+            animators.remove(key);
+        }
     }
 
     private void doEnemyTurns() {
@@ -1253,7 +1261,8 @@ animators.put("party_card_" + i, anim);
             // Stop animators for any party members that just died
             for (int i = 0; i < party.size(); i++) {
                 if (!party.get(i).isAlive()) {
-                    stopAnimatorFor("party_" + i);
+                    SpriteAnimator pa = animators.get("party_" + i);
+                    if (pa != null) { pa.showDead(); animators.remove("party_" + i); }
                     log(party.get(i).getName() + " has fallen!");
                 }
             }
