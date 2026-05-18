@@ -1006,10 +1006,11 @@ animators.put("party_card_" + i, anim);
         showCombatPopup(msg.toString(), () -> {
             updateAllBars();
             if (enemyDied) {
+                // Stop idle, play death animation, then freeze
                 SpriteAnimator deathAnim = animators.get("enemy_" + selectedTarget);
                 if (deathAnim != null) {
                     deathAnim.stop();
-                    deathAnim.playOnce("death", () -> {});
+                    deathAnim.playOnce("death", () -> stopAnimatorFor("enemy_" + selectedTarget));
                     animators.remove("enemy_" + selectedTarget);
                 }
             }
@@ -1098,6 +1099,8 @@ animators.put("party_card_" + i, anim);
 
     private void doItem() {
         if (!playerTurn) return;
+        Character actor = party.get(activeCharIndex);
+
         if (inventory.isEmpty()) {
             JOptionPane.showMessageDialog(frame,
                 "Your bag is empty!", "No Items",
@@ -1120,21 +1123,51 @@ animators.put("party_card_" + i, anim);
             if (options[i].equals(picked)) { itemIndex = i; break; }
         }
 
-        // Choose target character
-        String[] partyNames = party.stream()
+        // Peek at the item before removing it so we can validate the target
+        core.Item chosenItem = inventory.get(itemIndex);
+        boolean isRevive = chosenItem.getEffectType().equals("revive");
+
+        // Build valid target list based on item type:
+        // Revive → only dead characters | everything else → only alive characters
+        List<Character> validTargets = party.stream()
+            .filter(c -> isRevive ? !c.isAlive() : c.isAlive())
+            .toList();
+
+        if (validTargets.isEmpty()) {
+            String reason = isRevive
+                ? "No fallen allies to revive!"
+                : "No living allies to use this on!";
+            JOptionPane.showMessageDialog(frame, reason, "Can't Use", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Choose target from valid list only
+        String[] targetNames = validTargets.stream()
             .map(Character::getName).toArray(String[]::new);
         String targetName = (String) JOptionPane.showInputDialog(frame,
             "Use on who?", "Select Target",
-            JOptionPane.PLAIN_MESSAGE, null, partyNames, partyNames[0]);
+            JOptionPane.PLAIN_MESSAGE, null, targetNames, targetNames[0]);
         if (targetName == null) return;
 
-        Character target = party.stream()
+        Character target = validTargets.stream()
             .filter(c -> c.getName().equals(targetName))
-            .findFirst().orElse(party.get(0));
+            .findFirst().orElse(validTargets.get(0));
 
         try {
-            String msg = BattleEngine.useItem(inventory, itemIndex, target);
-            log(msg);
+            String effectMsg = BattleEngine.useItem(inventory, itemIndex, target);
+            // Show popup: "Van used Health Potion → Arthur recovered 80 HP!"
+            String popupMsg = actor.getName() + " used " + chosenItem.getName()
+                + "\n→ " + effectMsg;
+            JOptionPane.showMessageDialog(frame, popupMsg, "🎒 Item Used", JOptionPane.PLAIN_MESSAGE);
+            log(popupMsg.replace("\n→ ", " — "));
+
+            // If revived, restart their idle animation
+            if (isRevive && target.isAlive()) {
+                SpriteAnimator reviveAnim = animators.get("party_" + party.indexOf(target));
+                if (reviveAnim != null) reviveAnim.play("idle");
+                rebuildBottomBar(); // refresh card so it's no longer greyed out
+            }
+
             updateAllBars();
             endPlayerTurn();
         } catch (exceptions.EmptyInventoryException ex) {
@@ -1175,19 +1208,30 @@ animators.put("party_card_" + i, anim);
         // Count how many party members are still alive and can act
         long aliveCount = party.stream().filter(Character::isAlive).count();
 
+        if (aliveCount == 0) {
+            frame.goToGameOver(false);
+            return;
+        }
+
         if (partyActedThisRound < aliveCount) {
-            // More party members still need to act — advance to next character
+            // More party members still need to act — advance to next LIVING character
             advanceActiveCharacter();
             playerTurn = true;
             rebuildActionPanel();
             log("▶  " + party.get(activeCharIndex).getName() + "'s turn.");
         } else {
-            // All party members have acted — now enemies go
+            // All living party members have acted — now enemies go
             log("— Enemy phase —");
             Timer delay = new Timer(400, e -> doEnemyTurns());
             delay.setRepeats(false);
             delay.start();
         }
+    }
+
+    // Stops the sprite animator for a character or enemy key and freezes on last frame
+    private void stopAnimatorFor(String key) {
+        SpriteAnimator anim = animators.get(key);
+        if (anim != null) anim.stop();
     }
 
     private void doEnemyTurns() {
@@ -1206,7 +1250,17 @@ animators.put("party_card_" + i, anim);
 
         // Show each enemy action as a popup one at a time, then update state
         showEnemyPopupChain(messages, 0, () -> {
+            // Stop animators for any party members that just died
+            for (int i = 0; i < party.size(); i++) {
+                if (!party.get(i).isAlive()) {
+                    stopAnimatorFor("party_" + i);
+                    log(party.get(i).getName() + " has fallen!");
+                }
+            }
+
             updateAllBars();
+            rebuildBottomBar(); // refresh cards so dead ones grey out
+
             if (BattleEngine.isPartyDefeated(party)) {
                 frame.goToGameOver(false);
                 return;
@@ -1218,7 +1272,7 @@ animators.put("party_card_" + i, anim);
 
             // Reset round counter and go back to the FIRST living character
             partyActedThisRound = 0;
-            activeCharIndex = -1;          // will be advanced to 0 (or first alive)
+            activeCharIndex = -1;
             advanceActiveCharacter();
             playerTurn = true;
             rebuildActionPanel();
@@ -1363,8 +1417,24 @@ animators.put("party_card_" + i, anim);
     private void rebuildActionPanel() {
         remove(actionPanel);
         actionPanel = buildSkillPanel();
-        add(actionPanel, BorderLayout.WEST);  // WEST not EAST
+        add(actionPanel, BorderLayout.WEST);
         highlightActiveChar();
+        revalidate();
+        repaint();
+    }
+
+    // Rebuilds the bottom bar so dead character cards grey out and lose click handlers
+    private void rebuildBottomBar() {
+        // Find the existing bottom bar (SOUTH component) and replace it
+        java.awt.Component[] comps = getComponents();
+        for (java.awt.Component comp : comps) {
+            java.awt.BorderLayout bl = (java.awt.BorderLayout) getLayout();
+            if (comp == bl.getLayoutComponent(BorderLayout.SOUTH)) {
+                remove(comp);
+                break;
+            }
+        }
+        add(buildBottomBar(), BorderLayout.SOUTH);
         revalidate();
         repaint();
     }
