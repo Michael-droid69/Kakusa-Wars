@@ -88,6 +88,9 @@ public class BattleScreen extends JPanel {
                             frame.getCurrentArea(), frame.getCurrentWave());
 
         preloadBackgroundForArea(frame.getCurrentArea());
+        
+        // Start battle music for this area
+        io.MusicManager.playBattleMusic(frame.getCurrentArea());
 
         setLayout(new BorderLayout(0, 0));
         setBackground(new Color(8, 6, 14));
@@ -1308,11 +1311,13 @@ animators.put("party_card_" + i, anim);
         boolean escaped = BattleEngine.attemptFlee(party);
         if (escaped) {
             log("Your party fled the battle!");
+            io.MusicManager.stop(); // Stop battle music when fleeing
             frame.goToAreaSelect();
         } else {
             log("Flee failed! Your party took damage from the enemies!");
             updateAllBars();
             if (BattleEngine.isPartyDefeated(party)) {
+                io.MusicManager.stop(); // Stop battle music on defeat
                 frame.goToGameOver(false);
             } else {
                 endPlayerTurn();
@@ -1342,6 +1347,7 @@ animators.put("party_card_" + i, anim);
         long aliveCount = party.stream().filter(Character::isAlive).count();
 
         if (aliveCount == 0) {
+            io.MusicManager.stop(); // Stop battle music on defeat
             frame.goToGameOver(false);
             return;
         }
@@ -1400,6 +1406,7 @@ animators.put("party_card_" + i, anim);
             rebuildBottomBar(); // refresh cards so dead ones grey out
 
             if (BattleEngine.isPartyDefeated(party)) {
+                io.MusicManager.stop(); // Stop battle music on defeat
                 frame.goToGameOver(false);
                 return;
             }
@@ -1528,6 +1535,9 @@ animators.put("party_card_" + i, anim);
 
         if (wave >= 4) {
     log("🏆 All waves defeated! You win!");
+    
+    // Stop battle music and play victory music
+    io.MusicManager.playVictoryMusic();
 
     // ADD this block before the Timer:
     try {
@@ -1548,6 +1558,9 @@ animators.put("party_card_" + i, anim);
 } else {
             // Wave cleared: comprehensive cleanup before next wave
             log("Cleaning up wave " + wave + "...");
+            
+            // Stop battle music (shop music will start when shop opens)
+            io.MusicManager.stop();
             
             // Stop all animators and clear their memory
             cleanupForNewWave();

@@ -1,7 +1,11 @@
 package ui;
 
 import javax.swing.*;
+import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 public class ShopScreen extends JPanel {
@@ -16,76 +20,210 @@ public class ShopScreen extends JPanel {
     );
 
     private JLabel goldLabel;
+    private BufferedImage backgroundImage;
 
     public ShopScreen(MainFrame frame) {
-        setLayout(new BorderLayout(0, 20));
-        setBackground(new Color(14, 10, 5));
-        setBorder(BorderFactory.createEmptyBorder(30, 40, 30, 40));
+        setLayout(new BorderLayout(0, 0));
+        
+        // Stop battle music and play shop music
+        io.MusicManager.playShopMusic();
+        
+        // Load background image
+        loadBackgroundImage();
 
-        // ── Header ──
-        JLabel header = new JLabel("⚗  Shop", SwingConstants.CENTER);
-        header.setFont(new Font("Segoe UI", Font.BOLD, 30));
-        header.setForeground(new Color(240, 192, 96));
+        // ── RIGHT SIDE: Shop Items Panel ──
+        JPanel rightPanel = new JPanel(new BorderLayout(0, 0));
+        rightPanel.setOpaque(false);
+        rightPanel.setBorder(BorderFactory.createEmptyBorder(40, 20, 40, 40));
+        rightPanel.setPreferredSize(new Dimension(450, 0)); // Fixed width for right panel
 
-        goldLabel = new JLabel("Gold: " + frame.getGold() + "g", SwingConstants.CENTER);
-        goldLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        goldLabel.setForeground(new Color(220, 180, 60));
+        // Header with gold
+        JPanel headerPanel = new JPanel();
+        headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 15, 0));
 
-        JPanel topPanel = new JPanel(new GridLayout(2, 1));
-        topPanel.setBackground(new Color(14, 10, 5));
-        topPanel.add(header);
-        topPanel.add(goldLabel);
-        add(topPanel, BorderLayout.NORTH);
+        JLabel shopTitle = new JLabel("⚗ Merchant's Wares");
+        shopTitle.setFont(new Font("Serif", Font.BOLD, 26));
+        shopTitle.setForeground(new Color(255, 235, 180));
+        shopTitle.setAlignmentX(CENTER_ALIGNMENT);
+        
+        goldLabel = new JLabel("💰 Gold: " + frame.getGold() + "g");
+        goldLabel.setFont(new Font("Serif", Font.BOLD, 20));
+        goldLabel.setForeground(new Color(255, 215, 100));
+        goldLabel.setAlignmentX(CENTER_ALIGNMENT);
 
-        // ── Item grid ──
-        JPanel grid = new JPanel(new GridLayout(0, 1, 0, 10));
-        grid.setBackground(new Color(14, 10, 5));
+        headerPanel.add(shopTitle);
+        headerPanel.add(Box.createVerticalStrut(8));
+        headerPanel.add(goldLabel);
+
+        // ── Scrollable Item List ──
+        JPanel itemsContainer = new JPanel();
+        itemsContainer.setLayout(new BoxLayout(itemsContainer, BoxLayout.Y_AXIS));
+        itemsContainer.setOpaque(false);
 
         for (core.Item item : SHOP_ITEMS) {
-            grid.add(buildItemRow(item, frame));
+            itemsContainer.add(buildItemCard(item, frame));
+            itemsContainer.add(Box.createVerticalStrut(12));
         }
 
-        JScrollPane scroll = new JScrollPane(grid);
-        scroll.setBorder(null);
-        scroll.getViewport().setBackground(new Color(14, 10, 5));
-        add(scroll, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(itemsContainer);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(80, 60, 30, 180), 2),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        scrollPane.setBackground(new Color(0, 0, 0, 0));
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-        // ── Continue button ──
+        // ── Continue Button ──
         JButton continueBtn = new JButton("Continue to Wave " + frame.getCurrentWave() + "  ▶");
-        continueBtn.setFont(new Font("Segoe UI", Font.BOLD, 15));
-        continueBtn.setBackground(new Color(50, 25, 90));
-        continueBtn.setForeground(Color.WHITE);
+        continueBtn.setFont(new Font("Serif", Font.BOLD, 16));
+        continueBtn.setBackground(new Color(60, 40, 80, 220));
+        continueBtn.setForeground(new Color(255, 240, 200));
         continueBtn.setFocusPainted(false);
-        continueBtn.setBorderPainted(false);
-        continueBtn.setPreferredSize(new Dimension(280, 44));
+        continueBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(120, 90, 140), 2),
+            BorderFactory.createEmptyBorder(12, 24, 12, 24)
+        ));
         continueBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        continueBtn.setAlignmentX(CENTER_ALIGNMENT);
         continueBtn.addActionListener(e -> frame.goToBattle());
+        
+        // Hover effect
+        continueBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                continueBtn.setBackground(new Color(80, 60, 100, 240));
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                continueBtn.setBackground(new Color(60, 40, 80, 220));
+            }
+        });
 
-        JPanel bottom = new JPanel();
-        bottom.setBackground(new Color(14, 10, 5));
-        bottom.add(continueBtn);
-        add(bottom, BorderLayout.SOUTH);
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setOpaque(false);
+        buttonPanel.setBorder(BorderFactory.createEmptyBorder(15, 0, 0, 0));
+        buttonPanel.add(continueBtn);
+
+        rightPanel.add(headerPanel, BorderLayout.NORTH);
+        rightPanel.add(scrollPane, BorderLayout.CENTER);
+        rightPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Add right panel to the east side
+        add(rightPanel, BorderLayout.EAST);
     }
 
-    private JPanel buildItemRow(core.Item item, MainFrame frame) {
-        JPanel row = new JPanel(new BorderLayout(16, 0));
-        row.setBackground(new Color(22, 16, 10));
-        row.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(60, 45, 20), 1),
-            BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+    private void loadBackgroundImage() {
+        try {
+            File bgFile = new File("assets/wallpaper/shop_sell.png");
+            if (bgFile.exists()) {
+                backgroundImage = ImageIO.read(bgFile);
+            }
+        } catch (IOException e) {
+            System.out.println("Could not load shop background: " + e.getMessage());
+        }
+    }
 
-        JLabel info = new JLabel("<html><b>" + item.getName() + "</b>  —  "
-            + item.getDescription() + "</html>");
-        info.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        info.setForeground(new Color(200, 190, 160));
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        
+        if (backgroundImage != null) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                
+                int panelWidth = getWidth();
+                int panelHeight = getHeight();
+                
+                if (panelWidth > 0 && panelHeight > 0) {
+                    int imgWidth = backgroundImage.getWidth();
+                    int imgHeight = backgroundImage.getHeight();
+                    
+                    // Scale to cover the entire panel
+                    double scale = Math.max((double) panelWidth / imgWidth, 
+                                          (double) panelHeight / imgHeight);
+                    int scaledWidth = (int) (imgWidth * scale);
+                    int scaledHeight = (int) (imgHeight * scale);
+                    
+                    // Center the image
+                    int x = (panelWidth - scaledWidth) / 2;
+                    int y = (panelHeight - scaledHeight) / 2;
+                    
+                    g2.drawImage(backgroundImage, x, y, scaledWidth, scaledHeight, null);
+                }
+            } finally {
+                g2.dispose();
+            }
+        } else {
+            // Fallback gradient background
+            Graphics2D g2 = (Graphics2D) g.create();
+            GradientPaint gradient = new GradientPaint(
+                0, 0, new Color(20, 15, 10),
+                0, getHeight(), new Color(40, 30, 20)
+            );
+            g2.setPaint(gradient);
+            g2.fillRect(0, 0, getWidth(), getHeight());
+            g2.dispose();
+        }
+    }
 
-        JButton buyBtn = new JButton("Buy  " + item.getShopCost() + "g");
-        buyBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        buyBtn.setBackground(new Color(60, 45, 10));
-        buyBtn.setForeground(new Color(240, 200, 80));
+    private JPanel buildItemCard(core.Item item, MainFrame frame) {
+        JPanel card = new JPanel();
+        card.setLayout(new BorderLayout(12, 0));
+        card.setBackground(new Color(25, 20, 15, 230));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(100, 80, 50, 200), 2),
+            BorderFactory.createEmptyBorder(14, 16, 14, 16)
+        ));
+        card.setMaximumSize(new Dimension(400, 90));
+
+        // ── Left: Item Info ──
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setOpaque(false);
+
+        JLabel nameLabel = new JLabel(item.getName());
+        nameLabel.setFont(new Font("Serif", Font.BOLD, 16));
+        nameLabel.setForeground(new Color(255, 235, 180));
+        nameLabel.setAlignmentX(LEFT_ALIGNMENT);
+
+        JLabel descLabel = new JLabel(item.getDescription());
+        descLabel.setFont(new Font("Serif", Font.PLAIN, 13));
+        descLabel.setForeground(new Color(200, 185, 150));
+        descLabel.setAlignmentX(LEFT_ALIGNMENT);
+
+        infoPanel.add(nameLabel);
+        infoPanel.add(Box.createVerticalStrut(4));
+        infoPanel.add(descLabel);
+
+        // ── Right: Buy Button ──
+        JButton buyBtn = new JButton("Buy " + item.getShopCost() + "g");
+        buyBtn.setFont(new Font("Serif", Font.BOLD, 14));
+        buyBtn.setBackground(new Color(80, 60, 20, 220));
+        buyBtn.setForeground(new Color(255, 220, 120));
         buyBtn.setFocusPainted(false);
-        buyBtn.setBorderPainted(false);
-        buyBtn.setPreferredSize(new Dimension(100, 32));
+        buyBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(140, 110, 50), 2),
+            BorderFactory.createEmptyBorder(8, 20, 8, 20)
+        ));
+        buyBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        // Hover effect
+        buyBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                buyBtn.setBackground(new Color(100, 80, 30, 240));
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                buyBtn.setBackground(new Color(80, 60, 20, 220));
+            }
+        });
 
         buyBtn.addActionListener(e -> {
             if (frame.getGold() < item.getShopCost()) {
@@ -99,14 +237,17 @@ public class ShopScreen extends JPanel {
             frame.getInventory().add(new core.Item(
                 item.getName(), item.getDescription(),
                 item.getEffectType(), item.getEffectValue(), item.getShopCost()));
-            goldLabel.setText("Gold: " + frame.getGold() + "g");
+            goldLabel.setText("💰 Gold: " + frame.getGold() + "g");
+            
+            // Success feedback
             JOptionPane.showMessageDialog(frame,
-                item.getName() + " added to your bag!",
-                "Purchased", JOptionPane.INFORMATION_MESSAGE);
+                "✓ " + item.getName() + " added to your bag!",
+                "Purchase Successful", JOptionPane.INFORMATION_MESSAGE);
         });
 
-        row.add(info,   BorderLayout.CENTER);
-        row.add(buyBtn, BorderLayout.EAST);
-        return row;
+        card.add(infoPanel, BorderLayout.CENTER);
+        card.add(buyBtn, BorderLayout.EAST);
+        
+        return card;
     }
 }

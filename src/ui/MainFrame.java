@@ -69,13 +69,18 @@ public void goToLeaderboard() {
     }
 
     public void goToCharacterSelect() {
-        addScreen(new CharacterSelectScreen(this), "charselect");
-        layout.show(root, "charselect");
+        // Now uses combined screen instead
+        goToCombinedSelect();
+    }
+    
+    public void goToCombinedSelect() {
+        addScreen(new CombinedSelectScreen(this), "combinedselect");
+        layout.show(root, "combinedselect");
     }
 
     public void goToAreaSelect() {
-        addScreen(new AreaSelectScreen(this), "areaselect");
-        layout.show(root, "areaselect");
+        // Now uses combined screen instead
+        goToCombinedSelect();
     }
 
 
